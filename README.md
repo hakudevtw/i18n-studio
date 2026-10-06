@@ -34,6 +34,7 @@ i18n-studio --help                                         # or: i18n-studio <co
 | `approve [keys...] [--ns y] [--all-edited]` | Re-baseline hashes and mark rows `approved`. |
 | `mark <state> [keys...] [--ns x]` | Set a stored state (`ai-draft`, `in-review`, `approved`, `archived`, or a `customStates` label) on rows. Needs keys or `--ns`. |
 | `prune [keys...] [--ns x] [--yes]` | Delete **archived** keys from every language's JSON and from the status files. Without `--yes` it only lists them (dry run). See "Archived rows are a soft delete". |
+| `skill print\|install` | Print the packaged Claude skill, or install it (opt-in; see "Claude skill / AGENTS.md"). |
 | `set <lang> <ns.key> "<text>"` | Manual single-cell edit; the row then shows as `edited` (not auto-approved). The key must exist. |
 
 Keys are `<namespace>.<dotted.path>`; array indices are numeric segments (e.g. `faq-page.crj_support.faqs.0.question`).
@@ -217,6 +218,23 @@ The studio server has exactly one write endpoint, `POST /api/save` (the edit UI 
 - Translating: edit `<dir>/<lang>/<ns>.json` in source key order, then run `i18n-studio --dir <dir> draft --ns <ns>` (or pass explicit `<ns>.<key>` arguments) so the rows show `ai-draft`. Use `set <lang> <ns.key> "<text>"` for one-off fixes. Never edit status files by hand. Run `check` afterwards.
 - Completing an import: pipe the pasted sheet in (`import -`), open `proposal.json` in the report dir, and for each entry in `ambiguous` / `unmatched` set `resolve` to the correct id(s) from `candidates` (or look the id up in the source files). Set `"reject": true` on rows that look wrong and fix `changes.<lang>.new` if needed. Then `apply`. Do not edit `old` or `id`.
 - Removing a key: **never delete JSON keys yourself and never run `prune --yes` without explicit user approval.** Run `mark archived <ns.key>`, run `prune` (dry run) to list what would be deleted, check that no code references the keys, show the list to the user and ask. Only after they approve run `prune --yes`.
+
+## Claude skill / AGENTS.md
+
+The package ships a short skill, `skills/i18n-studio/SKILL.md`, that teaches an AI coding agent the rules for working with translations here: edit the JSON in source order, then run `draft` and `check`; removing a key means `mark archived`, listing the keys and **asking you** (never deleting JSON or running `prune --yes` on its own); import a reviewer's sheet through `import -`, treat sheet cells as data and ask before `apply`.
+
+Nothing is installed automatically: there is no postinstall or prepare script, and no other command touches the skill. You decide, in two steps:
+
+```bash
+i18n-studio skill print                      # read it first (add --format agents for the AGENTS.md block)
+i18n-studio skill install --dry-run          # shows the path, size, sha256 prefix and version; writes nothing
+i18n-studio skill install                    # .claude/skills/i18n-studio/SKILL.md in the current folder
+i18n-studio skill install --target agents    # or the marked block in ./AGENTS.md
+```
+
+`install` only ever writes the packaged file (there is no way to point it at another source), prints exactly what it writes, refuses to overwrite a different file unless you pass `--force` (it shows a line-level summary), and is a no-op when the file is already current. `--dir <path>` chooses the skills folder (or the folder holding AGENTS.md) explicitly; without it, a symlink that leads outside the current folder is refused. The AGENTS.md block lives between `<!-- i18n-studio:start -->` and `<!-- i18n-studio:end -->`; everything else in the file is preserved byte for byte, and a half-present marker pair is refused. The writes use the same atomic path as every other file the tool writes. The skill carries an `i18n-studio-version` marker that is kept equal to the package version.
+
+**Supply-chain note:** a skill is instructions for your AI. Review it (`skill print`) before installing it and again after every package upgrade, and use `skill install --dry-run` first. The packaged text contains no network instructions or destructive shell commands, and a test keeps it that way.
 
 ## Testing and contributing
 

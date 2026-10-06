@@ -24,6 +24,8 @@ describe("--help mentions the newer options and commands", () => {
       expect(out).toContain(flag);
     }
     expect(out).toContain("prune [keys...] [--ns x] [--yes]");
+    expect(out).toContain("skill print");
+    expect(out).toContain("skill install");
   });
 
   it("warns on prune about checking usage first", async () => {
