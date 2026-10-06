@@ -73,7 +73,7 @@ const Editor = ({
   useEffect(() => {
     const el = ref.current;
     el?.focus();
-    el?.setSelectionRange(el.value.length, el.value.length);
+    el?.select(); // whole value selected: type to replace, an arrow key to edit in place
   }, []);
   const onKeyDown = (e: KeyboardEvent) => {
     // Never act on keys that confirm an IME composition (Korean, Japanese, Chinese).

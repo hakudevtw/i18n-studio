@@ -18,6 +18,9 @@
 * {
   box-sizing: border-box;
 }
+html {
+  height: 100%;
+}
 body {
   font:
     14px / 1.5 Inter,
@@ -28,12 +31,14 @@ body {
   margin: 0;
   color: var(--fg);
   background: var(--bg);
-  height: 100vh;
-  overflow: hidden;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
   -webkit-font-smoothing: antialiased;
 }
 #root {
-  height: 100vh;
+  height: 100%;
+  min-width: 960px;
   display: grid;
   grid-template-columns: 248px 1fr;
   overflow: hidden;

@@ -238,3 +238,50 @@ describe("filters", () => {
     expect(q("table")).toBeNull();
   });
 });
+
+describe("editor selection", () => {
+  const open = async (how: "dblclick" | "enter" | "f2") => {
+    if (how === "dblclick") {
+      await dblclick(cell("home", "ko"));
+    } else {
+      await key(grid(), "ArrowDown");
+      await key(grid(), how === "enter" ? "Enter" : "F2");
+    }
+    return editor() as HTMLTextAreaElement;
+  };
+
+  for (const how of ["dblclick", "enter", "f2"] as const) {
+    it(`opens with the whole value selected (${how})`, async () => {
+      await show();
+      const ta = await open(how);
+      expect(ta.value.length).toBeGreaterThan(0);
+      expect(ta.selectionStart).toBe(0);
+      expect(ta.selectionEnd).toBe(ta.value.length);
+    });
+  }
+
+  it("selects the whole of a multi-line value", async () => {
+    const m = model();
+    m.rows[0].cells[1] = { text: "첫 줄\n둘째 줄\n셋째 줄" };
+    await show(m);
+    const ta = await open("dblclick");
+    expect(ta.value).toBe("첫 줄\n둘째 줄\n셋째 줄");
+    expect(ta.selectionStart).toBe(0);
+    expect(ta.selectionEnd).toBe(ta.value.length);
+  });
+
+  it("typing replaces the selection; moving the caret edits in place", async () => {
+    await show();
+    await type(await open("dblclick"), "집");
+    expect(editor()?.value).toBe("집");
+    await key(editor(), "Enter");
+    expect(pending()).toBe("1 pending change");
+
+    const again = await open("dblclick");
+    expect(again.selectionEnd - again.selectionStart).toBe(again.value.length);
+    again.setSelectionRange(1, 1); // what an arrow key does in a browser
+    expect(again.selectionStart).toBe(again.selectionEnd);
+    await key(again, "Enter");
+    expect(pending()).toBe("1 pending change");
+  });
+});

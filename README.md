@@ -161,6 +161,7 @@ Unless `readOnly`, the studio edits like Prisma Studio: changes are **staged** a
 - **Copy as TSV** copies the *current* values, including staged ones.
 - Menus and dialogs render in a top-level layer (never clipped by the scrolling table) and close on Esc, outside click, scroll or resize, returning focus to their trigger.
 - The static `report` and `--read-only` studio render none of this.
+- The page is designed for desktop widths: below about 960 px it scrolls horizontally instead of squeezing the table.
 
 ### Drafts: unsaved work survives a refresh
 
