@@ -14,6 +14,7 @@ import {
 } from "../model";
 import { ApiError, fetchModel, saveBatch } from "./api";
 import { ConfirmDialog, ManualCopyDialog, ShortcutsDialog } from "./dialogs";
+import { type Restored, relativeTime } from "./draft";
 import { type Editing, Grid, type GridActions } from "./grid";
 import type { Translator } from "./i18n";
 import { MenuLayer, type MenuTarget } from "./menu";
@@ -21,7 +22,6 @@ import { clampSel, type Move, move, type Sel } from "./nav";
 import {
   cellKey,
   countStaged,
-  emptyStaged,
   hasConflicts,
   hasSourceEdits,
   listStaged,
@@ -35,6 +35,7 @@ import {
   truncate,
 } from "./staged";
 import { tsvText } from "./tsv";
+import { usePersistDraft, useRestoredDraft } from "./use-draft";
 
 const TYPING = /^(INPUT|TEXTAREA|SELECT)$/;
 const COPY_RESET_MS = 1500;
@@ -167,8 +168,27 @@ export const Report = ({
   const [group, setGroup] = useState(() => groupFromHash(groups));
   const [copyState, setCopyState] = useState<CopyState>("copy");
   const [manual, setManual] = useState<string | null>(null);
-  const [staged, setStaged] = useState<Staged>(emptyStaged);
+  const draft = useRestoredDraft({
+    enabled: writable && model.persistDrafts,
+    projectId: model.projectId,
+    rows: model.rows,
+    columns: model.columns,
+  });
+  const [staged, setStaged] = useState<Staged>(draft.staged);
   const stagedRef = useRef(staged);
+  const [draftNote, setDraftNote] = useState<Restored | null>(
+    draft.restored + draft.dropped > 0 ? draft : null
+  );
+  const savedAgo = useMemo(
+    () => relativeTime(draft.savedAt, Date.now(), locale),
+    [draft.savedAt, locale]
+  );
+  const persistence = usePersistDraft({
+    enabled: writable && model.persistDrafts,
+    projectId: model.projectId,
+    staged,
+    latest: stagedRef,
+  });
   const [editing, setEditing] = useState<Editing | null>(null);
   const editingRef = useRef<Editing | null>(null);
   const cancelled = useRef(false);
@@ -653,6 +673,56 @@ export const Report = ({
           </div>
         </div>
         {banner && <div id="banner">{banner}</div>}
+        {draftNote && count > 0 && (
+          <div aria-live="polite" class="note" id="draft">
+            <span>
+              {[
+                draftNote.restored > 0 &&
+                  tn("draft.restored", draftNote.restored, { when: savedAgo }),
+                draftNote.conflicts > 0 &&
+                  tn("draft.conflicts", draftNote.conflicts),
+                draftNote.dropped > 0 && tn("draft.dropped", draftNote.dropped),
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            </span>
+            <button
+              class="mini"
+              onClick={() => setConfirm({ kind: "discard", n: count })}
+              type="button"
+            >
+              {t("bar.discard")}
+            </button>
+            <button
+              class="mini"
+              onClick={() => setDraftNote(null)}
+              type="button"
+            >
+              {t("draft.dismiss")}
+            </button>
+          </div>
+        )}
+        {count > 0 && persistence.trouble && (
+          <div aria-live="polite" class="note" id="draft-trouble">
+            {t(
+              persistence.trouble === "tooLarge"
+                ? "draft.tooLarge"
+                : "draft.unavailable"
+            )}
+          </div>
+        )}
+        {count > 0 && persistence.otherTab && (
+          <div aria-live="polite" class="note" id="draft-other-tab">
+            <span>{t("draft.otherTab")}</span>
+            <button
+              class="mini"
+              onClick={persistence.dismissOtherTab}
+              type="button"
+            >
+              {t("draft.dismiss")}
+            </button>
+          </div>
+        )}
         {problemText && (
           <div id="error" role="alert">
             {problemText}

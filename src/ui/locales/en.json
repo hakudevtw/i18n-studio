@@ -90,5 +90,15 @@
   "help.open": "?: show this help",
   "bar.list": "Changes to be saved",
   "bar.revert": "Revert",
-  "bar.jump": "Go to {id}"
+  "bar.jump": "Go to {id}",
+  "draft.restored.one": "Restored {n} unsaved change (saved {when}).",
+  "draft.restored.other": "Restored {n} unsaved changes (saved {when}).",
+  "draft.dropped.one": "{n} could not be restored (its row or language no longer exists).",
+  "draft.dropped.other": "{n} could not be restored (their rows or languages no longer exist).",
+  "draft.conflicts.one": "{n} conflicts with a change on disk; resolve it below.",
+  "draft.conflicts.other": "{n} conflict with changes on disk; resolve them below.",
+  "draft.dismiss": "Dismiss",
+  "draft.unavailable": "This browser cannot keep drafts, so unsaved changes are lost if you leave the page. Save soon.",
+  "draft.tooLarge": "These changes are too large to keep as a draft in this browser, so they are lost if you leave the page. Save soon.",
+  "draft.otherTab": "Another browser tab changed the draft for this project. The last one to write wins; drafts are not merged."
 }

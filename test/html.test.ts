@@ -32,6 +32,8 @@ describe("renderReport embedding", () => {
     readOnly: true,
     languageSwitcher: true,
     showArchived: false,
+    persistDrafts: true,
+    projectId: "abc123def456",
     storedStates: [],
   };
   const html = renderReport(model);

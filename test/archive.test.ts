@@ -19,6 +19,7 @@ import { readTable } from "../src/table.js";
 import { copyFixture, readJson, readText, tempDir } from "./helpers.js";
 import { snapshot, tmpFiles } from "./snapshot.js";
 
+const HEX12 = /^[0-9a-f]{12}$/;
 const ZERO = "common._0";
 const TITLE = "navigation.footer.title";
 const archivedFixture = (overrides = {}) => {
@@ -286,5 +287,45 @@ describe("showArchived option", () => {
     expect(prune(shown, {}, { yes: false }).archived).toEqual(
       prune(hidden, {}, { yes: false }).archived
     );
+  });
+});
+
+describe("persistDrafts option", () => {
+  const cwd = tempDir();
+  const write = (data: unknown) =>
+    writeFileSync(join(cwd, CONFIG_FILE), JSON.stringify(data));
+
+  it("defaults to true, reads the file and is strictly typed", () => {
+    write({ dir: "m" });
+    expect(configFromArgs({}, cwd).persistDrafts).toBe(true);
+    write({ dir: "m", persistDrafts: false });
+    expect(configFromArgs({}, cwd).persistDrafts).toBe(false);
+    write({ dir: "m", persistDrafts: "no" });
+    expect(() => configFromArgs({}, cwd)).toThrow('"persistDrafts" must be');
+  });
+
+  it("lets flags beat the file, and --no-persist-drafts beat --persist-drafts", () => {
+    write({ dir: "m", persistDrafts: true });
+    expect(
+      configFromArgs({ "no-persist-drafts": true }, cwd).persistDrafts
+    ).toBe(false);
+    write({ dir: "m", persistDrafts: false });
+    expect(configFromArgs({ "persist-drafts": true }, cwd).persistDrafts).toBe(
+      true
+    );
+    expect(
+      configFromArgs({ "persist-drafts": true, "no-persist-drafts": true }, cwd)
+        .persistDrafts
+    ).toBe(false);
+  });
+
+  it("is in the model together with a project id that is not the path", () => {
+    const cfg = archivedFixture({ persistDrafts: false });
+    const model = buildModel(cfg);
+    expect(model.persistDrafts).toBe(false);
+    expect(model.projectId).toMatch(HEX12);
+    expect(JSON.stringify(model)).not.toContain(cfg.i18nDir);
+    expect(buildModel(archivedFixture()).projectId).not.toBe(model.projectId);
+    expect(buildModel(cfg).projectId).toBe(model.projectId);
   });
 });

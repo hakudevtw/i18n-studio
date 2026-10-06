@@ -71,6 +71,7 @@ Global flags work anywhere on the command line. A config file is optional. Prece
 | `excludeNamespaces` | none | `[]` | Namespaces ignored everywhere. |
 | `readOnly` | `--read-only` | `false` | The studio server refuses `POST /api/save` (403) and the model carries `readOnly: true`. The static `report` is always read-only. |
 | `languageSwitcher` | `--no-language-switcher` | `true` | Show a language select (en, ko, zh-TW, ja) in the page's top bar. When off, a remembered choice is ignored (`?lang=` still works). |
+| `persistDrafts` | `--persist-drafts` / `--no-persist-drafts` | `true` | Keep staged (unsaved) studio edits in the browser so a refresh or crash does not lose them. When off, nothing is read or written and an existing draft is left untouched. |
 | `showArchived` | `--show-archived` / `--no-show-archived` | `false` | Initial state of the page's "Show archived" toggle. Only the page changes; `check`, `export`, `status`, `init` and `prune` are unaffected. |
 | `open` | `--open` / `--no-open` | `false` | `studio` opens the browser at the base URL when it starts (`--no-open` wins). `report --open` stays a plain flag. |
 | `uiLocale` | `--ui-lang <auto\|en\|ko\|zh-TW\|ja>` | `auto` | Language of the studio/report page. `auto` follows the browser; `?lang=ko` in the URL overrides everything. |
@@ -160,6 +161,18 @@ Unless `readOnly`, the studio edits like Prisma Studio: changes are **staged** a
 - **Copy as TSV** copies the *current* values, including staged ones.
 - Menus and dialogs render in a top-level layer (never clipped by the scrolling table) and close on Esc, outside click, scroll or resize, returning focus to their trigger.
 - The static `report` and `--read-only` studio render none of this.
+
+### Drafts: unsaved work survives a refresh
+
+Staged edits and status changes are saved to the browser's `localStorage` (debounced about 300 ms, and flushed when the tab is hidden or closed) under `i18n-studio:draft:<projectId>`, where the project id is a short hash of the messages path (the path itself is never exposed). They are removed when you Save, confirm Discard, or the staged set becomes empty (including by reverting to the original values). Nothing is stored in `--read-only` mode, in the static report, or when `persistDrafts` is off; the API token is never stored.
+
+On the next load a banner says "Restored N unsaved changes (saved 5 minutes ago)" with Discard and Dismiss. The draft is checked against the fresh data: an edit whose original value changed on disk comes back as a **conflict** (Keep mine / Use theirs, the same UI as a failed save), and edits for rows or languages that no longer exist are dropped and counted in the banner. If the browser cannot store drafts (private mode, quota, too large) you keep working in memory and get a non-blocking notice while changes are pending. If another tab changes the same draft, this tab warns (last write wins; drafts are never merged). The "leave this page?" guard stays.
+
+Good to know:
+
+- **localStorage is per origin, and the origin includes the port.** By default the studio starts at 4321 and walks up when that port is busy, so a draft saved on one port will not appear on another. Set `port` in `i18n-studio.config.json` for a stable origin.
+- Drafts are per browser profile (a different browser or profile will not see them).
+- Privacy: the draft text sits in that browser's `localStorage` until it is saved or discarded. Use `--no-persist-drafts` on shared machines.
 
 ### Archived rows are a soft delete
 

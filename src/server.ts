@@ -38,6 +38,19 @@ const json = (status: number, value: unknown): Reply => ({
   type: "application/json",
 });
 
+const MAX_DRAIN = 16 * MAX_BODY;
+
+/** Throw away an unread body (so the client gets its answer), but not an endless one. */
+const drain = (req: IncomingMessage) => {
+  let seen = 0;
+  req.on("data", (chunk: Buffer) => {
+    seen += chunk.length;
+    if (seen > MAX_DRAIN) {
+      req.destroy();
+    }
+  });
+};
+
 /** Reads the body up to MAX_BODY; further bytes are drained, never buffered. */
 const readBody = (req: IncomingMessage) =>
   new Promise<string | "too-large">((resolve, reject) => {
@@ -46,6 +59,9 @@ const readBody = (req: IncomingMessage) =>
     let tooLarge = false;
     req.on("data", (chunk: Buffer) => {
       size += chunk.length;
+      if (size > MAX_DRAIN) {
+        req.destroy();
+      }
       if (size > MAX_BODY) {
         tooLarge = true;
         chunks.length = 0;
@@ -64,11 +80,11 @@ const saveReply = async (
   req: IncomingMessage
 ): Promise<Reply> => {
   if (!JSON_TYPE.test(req.headers["content-type"] ?? "")) {
-    req.resume();
+    drain(req);
     return text(415, "content-type must be application/json");
   }
   if (Number(req.headers["content-length"] ?? 0) > MAX_BODY) {
-    req.resume();
+    drain(req);
     return text(413, "body too large");
   }
   const body = await readBody(req);
@@ -114,11 +130,11 @@ const saveRoute = async (ctx: Ctx, req: IncomingMessage): Promise<Reply> => {
   );
   const sameSite = site === undefined || site === "same-origin";
   if (!(ctx.origins.has(req.headers.origin ?? "") && sameSite && tokenOk)) {
-    req.resume();
+    drain(req);
     return text(403, "forbidden");
   }
   if (ctx.config.readOnly) {
-    req.resume();
+    drain(req);
     return text(403, "read-only");
   }
   return await saveReply(ctx.config, req);
@@ -177,7 +193,6 @@ export const startStudio = async (
         "x-content-type-options": "nosniff",
         "content-security-policy": CSP,
         "x-frame-options": "DENY",
-        ...(status === 413 && { connection: "close" }),
       });
       res.end(body);
     };

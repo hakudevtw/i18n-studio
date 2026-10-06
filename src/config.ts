@@ -46,6 +46,8 @@ export type Config = {
   open: boolean;
   /** Initial state of the "Show archived" toggle in the page; nothing else changes. */
   showArchived: boolean;
+  /** Keep staged edits in the browser's localStorage until saved or discarded. */
+  persistDrafts: boolean;
 };
 
 export const DEFAULTS = {
@@ -65,6 +67,7 @@ export const DEFAULTS = {
   languageSwitcher: true,
   open: false,
   showArchived: false,
+  persistDrafts: true,
 } as const satisfies Partial<Record<keyof Config, unknown>>;
 
 export type ConfigFlags = {
@@ -82,6 +85,8 @@ export type ConfigFlags = {
   "no-language-switcher"?: boolean;
   "show-archived"?: boolean;
   "no-show-archived"?: boolean;
+  "persist-drafts"?: boolean;
+  "no-persist-drafts"?: boolean;
 };
 
 export const CONFIG_FILE = "i18n-studio.config.json";
@@ -109,6 +114,7 @@ const FILE_SCHEMA: Record<string, Kind> = {
   languageSwitcher: "boolean",
   open: "boolean",
   showArchived: "boolean",
+  persistDrafts: "boolean",
 };
 
 const DIGITS = /^\d+$/;
@@ -199,6 +205,11 @@ const flagValues = (flags: ConfigFlags): Values => {
     if (!isIndent(out.indent)) {
       throw new Error(`--indent must be ${EXPECTED.indent}`);
     }
+  }
+  if (flags["no-persist-drafts"]) {
+    out.persistDrafts = false;
+  } else if (flags["persist-drafts"]) {
+    out.persistDrafts = true;
   }
   if (flags["no-show-archived"]) {
     out.showArchived = false;
@@ -302,6 +313,7 @@ export const configFromArgs = (
     languageSwitcher: pick("languageSwitcher", "languageSwitcher"),
     open: pick("open", "open"),
     showArchived: pick("showArchived", "showArchived"),
+    persistDrafts: pick("persistDrafts", "persistDrafts"),
   };
   validateStates(config);
   return config;
@@ -329,5 +341,6 @@ export const baseConfig = (
   languageSwitcher: DEFAULTS.languageSwitcher,
   open: DEFAULTS.open,
   showArchived: DEFAULTS.showArchived,
+  persistDrafts: DEFAULTS.persistDrafts,
   ...overrides,
 });

@@ -15,6 +15,7 @@ describe("--help mentions the newer options and commands", () => {
     for (const flag of [
       "--no-language-switcher",
       "--show-archived / --no-show-archived",
+      "--persist-drafts / --no-persist-drafts",
       "--open / --no-open",
       "--read-only",
       "--ui-lang",

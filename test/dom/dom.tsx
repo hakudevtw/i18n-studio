@@ -30,6 +30,8 @@ export const model = (overrides: Partial<Model> = {}): Model => ({
   readOnly: false,
   languageSwitcher: true,
   showArchived: false,
+  persistDrafts: true,
+  projectId: "proj-test",
   storedStates: ["ai-draft", "in-review", "approved", "archived"],
   rows: [
     {

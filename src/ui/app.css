@@ -691,3 +691,17 @@ button.act.icon {
   border-radius: 8px;
   font-weight: 600;
 }
+
+/* Draft notices */
+.note {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--banner);
+  font-size: 13px;
+}
+.note > span {
+  flex: 1;
+}

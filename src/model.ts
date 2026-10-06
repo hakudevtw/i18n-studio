@@ -49,6 +49,10 @@ export type Model = {
   readOnly: boolean;
   /** Show the language select in the top bar (config `languageSwitcher`). */
   languageSwitcher: boolean;
+  /** Keep unsaved edits in the browser (config `persistDrafts`). */
+  persistDrafts: boolean;
+  /** First 12 hex of sha256(messages dir): keys the browser draft; the path itself never leaves the server. */
+  projectId: string;
   /** Initial state of the "Show archived" toggle (the page does not remember changes). */
   showArchived: boolean;
   /** States a row can be set to (built in plus custom); never derived ones. */

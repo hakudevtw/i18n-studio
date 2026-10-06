@@ -90,5 +90,15 @@
   "help.open": "?：顯示此說明",
   "bar.list": "即將儲存的變更",
   "bar.revert": "還原",
-  "bar.jump": "前往 {id}"
+  "bar.jump": "前往 {id}",
+  "draft.restored.one": "已還原尚未儲存的 {n} 項變更（{when}儲存）。",
+  "draft.restored.other": "已還原尚未儲存的 {n} 項變更（{when}儲存）。",
+  "draft.dropped.one": "{n} 項無法還原（其列或語言已不存在）。",
+  "draft.dropped.other": "{n} 項無法還原（其列或語言已不存在）。",
+  "draft.conflicts.one": "{n} 項與磁碟上的變更衝突，請在下方處理。",
+  "draft.conflicts.other": "{n} 項與磁碟上的變更衝突，請在下方處理。",
+  "draft.dismiss": "關閉",
+  "draft.unavailable": "此瀏覽器無法保存草稿，離開頁面後未儲存的變更將會遺失。請盡快儲存。",
+  "draft.tooLarge": "這些變更太大，無法在此瀏覽器保存為草稿，離開頁面後將會遺失。請盡快儲存。",
+  "draft.otherTab": "另一個瀏覽器分頁變更了此專案的草稿。以最後寫入者為準，草稿不會合併。"
 }

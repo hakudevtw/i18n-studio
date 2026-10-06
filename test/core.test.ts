@@ -149,6 +149,8 @@ describe("static report", () => {
     readOnly: true,
     languageSwitcher: true,
     showArchived: false,
+    persistDrafts: true,
+    projectId: "abc123def456",
     storedStates: [],
   };
 

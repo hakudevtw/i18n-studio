@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import {
@@ -28,6 +29,10 @@ import {
   storedStates,
 } from "./status.js";
 import { type Sheet, writeTable } from "./table.js";
+
+/** A stable, non-reversible handle for this project (never the path itself). */
+export const projectIdOf = (config: Config) =>
+  createHash("sha256").update(config.i18nDir).digest("hex").slice(0, 12);
 
 export type Scope = { ns?: string; keys?: string[] };
 export type ExportFormat = "tsv" | "csv" | "xlsx";
@@ -458,6 +463,8 @@ export const buildModel = (
     readOnly: config.readOnly,
     languageSwitcher: config.languageSwitcher,
     showArchived: config.showArchived,
+    persistDrafts: config.persistDrafts,
+    projectId: projectIdOf(config),
     storedStates: storedStates(config),
     banners,
     uiLocale: config.uiLocale,
