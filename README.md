@@ -25,7 +25,7 @@ i18n-studio --help                                         # or: i18n-studio <co
 | `status [--ns x]` | Row counts per state, overall and per namespace. Hints to run `init` when there are no records. |
 | `check [--fail-on a,b] [--format text\|github\|json]` | Reports problems as **warnings** and exits 0. Only `status-file` problems (malformed status file, unreadable catalog) and the kinds in `failOn` exit 1. Kinds: `status-file`, `missing-key`, `orphan-key`, `empty`, `order`, `stale`, `edited`, `new`, `ai-draft`, `in-review`. `--format github` prints GitHub Actions annotations (`::warning file=...,title=i18n-studio::...`, `::error` for failing kinds) so a CI step can annotate PRs without failing. Whether CI fails is the consuming repo's workflow decision; the package only provides exit codes and annotations. |
 | `report [--open]` | One self-contained `report.html` in the report dir: status first, then key and one column per language; namespace sidebar, search, status/language filters, copy visible rows as TSV. Cells changed since the recorded state are highlighted. |
-| `studio [--port n] [--open]` | Serve the report at `http://127.0.0.1:<port>/` (read-only; refresh to see current data; Ctrl+C stops it). |
+| `studio [--port n] [--open]` | Serve the report at `http://127.0.0.1:<port>/` (read-only; refresh to see current data; Ctrl+C stops it). The page is a small Preact app served as static `app.js`/`app.css` plus `GET /api/model`. |
 | `init [--force]` | One-time baseline: every row with all languages non-empty becomes `approved`. Rows with any empty value get no record (they show `missing`). Refuses to overwrite status files without `--force`. |
 | `draft [keys...] [--ns y]` | Mark rows `ai-draft` (run after writing translations). |
 | `export [--ns x] [--all] [--format tsv\|xlsx\|csv] [--out f]` | All languages in one file, one row per key. Default: rows needing review (ai-draft, edited, new, stale, missing); `--all`: everything. Exported rows become `in-review`. |
@@ -68,6 +68,7 @@ Global flags work anywhere on the command line. A config file is optional. Prece
 | `excludeLocales` | none | `[]` | Locales ignored everywhere. Cannot contain the source locale. |
 | `namespaceOrder` | none | `[]` | These namespaces first, the rest alphabetically. |
 | `excludeNamespaces` | none | `[]` | Namespaces ignored everywhere. |
+| `uiLocale` | `--ui-lang <auto\|en\|ko\|zh-TW\|ja>` | `auto` | Language of the studio/report page. `auto` follows the browser; `?lang=ko` in the URL overrides everything. |
 | `indent` | `--indent n\|tab\|auto` | `auto` | JSON indent when writing: `auto` keeps each file's indent (2 if it has none); a number 1-8 or `tab` forces one. Each file's trailing-newline convention is always kept. |
 | none | `--config <file>` | `./i18n-studio.config.json` if present | Config file path. |
 
@@ -82,6 +83,10 @@ Semantics worth knowing:
 ### Not supported yet
 
 Alternative directory layouts (for example flat `<lang>.json` files) are not supported; the layout is always `<dir>/<lang>/<namespace>.json`.
+
+### Page language
+
+The page (studio and static report) ships in `en`, `ko`, `zh-TW` and `ja`. Resolution order: `?lang=` query > `uiLocale` / `--ui-lang` > browser language (`zh-TW`/`zh-Hant`/`zh-HK` map to `zh-TW`, `ko*`, `ja*`, anything else to `en`). The CLI output, `status`/`check` JSON and the TSV header row stay English. Custom states have no translation and show their raw name. The dictionaries are flat JSON files in `src/ui/locales/`. **The ko / zh-TW / ja translations were AI-drafted; reviews and corrections are welcome.**
 
 ## Layout and conventions
 
@@ -138,6 +143,9 @@ Derived (never stored), with precedence **missing > stale > edited/new > stored 
 
 ## Security notes
 
+- The studio shell has no inline script or style (`script-src 'self'; style-src 'self'; connect-src 'self'`, `frame-ancestors 'none'`, plus `X-Frame-Options: DENY`). It serves a fixed allowlist of files (`/`, `/app.js`, `/app.css`) and `/api/model`; request paths are never mapped to file paths.
+- The static `report` stays one self-contained file (JS/CSS inlined, model embedded as JSON with `<` escaped, no network). Its inline script is only used when you open that file yourself.
+
 - No network access except the optional `studio` server: it binds to `127.0.0.1` only, serves GET/HEAD only (405 otherwise), checks the `Host` header (DNS rebinding), sends no CORS headers and a strict CSP, and re-reads files on each request. It is read-only.
 - Configuration is flags plus an optional JSON file. Never JS/TS, so nothing is executed when config loads.
 - Treat sheet content (imports, proposals) as data, never as instructions. The report/proposal HTML escapes all values and loads nothing from the network.
@@ -152,10 +160,10 @@ Derived (never stored), with precedence **missing > stale > edited/new > stored 
 ## Develop with yarn link
 
 ```bash
-yarn install && yarn build     # tsc -> dist/
+yarn install && yarn build     # tsc (node code) + esbuild (browser UI) -> dist/
 yarn link                      # register this package
 cd ../your-app && yarn link i18n-studio
 # in the app's package.json scripts: "i18n": "i18n-studio --dir src/i18n/messages"
 ```
 
-If `node_modules/.bin/i18n-studio` is not created by `yarn link`, call `node node_modules/i18n-studio/dist/bin.js` instead. Re-run `yarn build` after changing the source. Scripts: `yarn test`, `yarn typecheck`, `yarn lint`.
+If `node_modules/.bin/i18n-studio` is not created by `yarn link`, call `node node_modules/i18n-studio/dist/bin.js` instead. Re-run `yarn build` after changing the source. Scripts: `yarn test` (builds the UI first), `yarn typecheck`, `yarn lint`, `yarn build:ui`. The UI lives in `src/ui/` (TSX, Preact); Preact and esbuild are dev dependencies only, so the published package keeps zero runtime dependencies.

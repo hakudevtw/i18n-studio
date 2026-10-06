@@ -24,7 +24,7 @@ const reportModel = (file: string) =>
   JSON.parse(
     (readFileSync(file, "utf8").match(DATA_BLOCK) as RegExpMatchArray)[1]
   ) as {
-    banner?: string;
+    banners: { kind: string }[];
     rows: {
       group: string;
       key: string;
@@ -116,7 +116,13 @@ describe("export -> PM edit -> import -> apply (fixture copy)", () => {
         (r) => r.group === "faq-page" && r.key === "crj_support.faqs.0.answer"
       )?.status
     ).toBe("pending");
-    expect(overlaid.banner).toContain("Import proposal pending");
+    expect(overlaid.banners).toContainEqual({
+      kind: "proposal",
+      changed: 1,
+      pending: 1,
+      confirmed: 0,
+      manual: 0,
+    });
 
     expect(apply(cfg, imp.proposal)).toMatchObject({
       approved: 1,
@@ -139,7 +145,7 @@ describe("export -> PM edit -> import -> apply (fixture copy)", () => {
 
     // Once applied, the repo already reflects the proposal: no overlay is left.
     const after = reportModel(report(cfg, { proposal: imp.proposal }).file);
-    expect(after.banner ?? "").not.toContain("Import proposal pending");
+    expect(after.banners.some((b) => b.kind === "proposal")).toBe(false);
     expect(
       after.rows.find((r) => r.group === "navigation" && r.key === "link.faq")
         ?.status

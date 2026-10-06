@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAsset } from "../src/assets.js";
 import { loadCatalog } from "../src/catalog.js";
 import { run } from "../src/cli.js";
 import {
@@ -15,7 +16,7 @@ import {
 } from "../src/commands.js";
 import { CONFIG_FILE, configFromArgs, DEFAULTS } from "../src/config.js";
 import { detectIndent } from "../src/flatten.js";
-import { renderHtml } from "../src/html.js";
+import { renderReport } from "../src/html.js";
 import { startStudio } from "../src/server.js";
 import { getRows, readStatus } from "../src/status.js";
 import { readTable } from "../src/table.js";
@@ -287,7 +288,7 @@ describe("custom states", () => {
     const cfg = syntheticConfig({ customStates: ["legal-ok"] });
     init(cfg, { force: false });
     mark(cfg, "legal-ok", { keys: ["a.title"] });
-    const html = renderHtml(buildModel(cfg));
+    const html = renderReport(buildModel(cfg));
     expect(html).toContain("legal-ok");
     expect(html).not.toContain(".b-legal-ok");
   });
@@ -432,12 +433,44 @@ describe("copyHeader and port", () => {
 });
 
 describe("page: sticky namespace rows", () => {
-  const html = renderHtml({ title: "t", columns: ["en"], rows: [] });
-
   it("renders the group row as a sticky label over status+key plus a filler", () => {
-    expect(html).toContain("label.colSpan = 2");
-    expect(html).toContain('label.className = "label"');
-    expect(html).toContain("tr.group td.label{position:sticky;left:0");
-    expect(html).not.toContain("td.colSpan = cols.length + 2");
+    expect(readAsset("app.css")).toContain(
+      "tr.group td.label{position:sticky;left:0"
+    );
+    const js = readAsset("app.js");
+    expect(js).toContain('class:"label"');
+    expect(js).toContain("colSpan:2");
+  });
+});
+
+describe("uiLocale", () => {
+  const cwd = tempDir();
+  const write = (data: unknown) =>
+    writeFileSync(join(cwd, CONFIG_FILE), JSON.stringify(data));
+
+  it("defaults to auto, reads the file, and --ui-lang wins", () => {
+    write({ dir: "m" });
+    expect(configFromArgs({}, cwd).uiLocale).toBe("auto");
+    write({ dir: "m", uiLocale: "zh-TW" });
+    expect(configFromArgs({}, cwd).uiLocale).toBe("zh-TW");
+    expect(configFromArgs({ "ui-lang": "ko" }, cwd).uiLocale).toBe("ko");
+  });
+
+  it("is strict about values, naming the key or flag", () => {
+    write({ dir: "m", uiLocale: "fr" });
+    expect(() => configFromArgs({}, cwd)).toThrow('"uiLocale" must be');
+    write({ dir: "m" });
+    expect(() => configFromArgs({ "ui-lang": "zh-CN" }, cwd)).toThrow(
+      "--ui-lang"
+    );
+  });
+
+  it("the static report embeds it and stays self-contained", () => {
+    const cfg = syntheticConfig({ uiLocale: "ja" });
+    const html = readFileSync(report(cfg).file, "utf8");
+    expect(html).toContain('"uiLocale":"ja"');
+    expect(html).toContain('id="data"');
+    expect(html).not.toContain('src="');
+    expect(html).not.toContain('href="');
   });
 });

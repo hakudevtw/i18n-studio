@@ -727,7 +727,7 @@ es-module-lexer@^1.7.0:
   resolved "https://registry.yarnpkg.com/es-module-lexer/-/es-module-lexer-1.7.0.tgz#9159601561880a85f2734560a9099b2c31e5372a"
   integrity sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==
 
-"esbuild@^0.27.0 || ^0.28.0":
+esbuild@0.28.2, "esbuild@^0.27.0 || ^0.28.0":
   version "0.28.2"
   resolved "https://registry.yarnpkg.com/esbuild/-/esbuild-0.28.2.tgz#0f43bd1bad955b72d24e2261e3abe5957ccf0816"
   integrity sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==
@@ -1147,6 +1147,11 @@ postcss@^8.5.6:
     nanoid "^3.3.19"
     picocolors "^1.1.1"
     source-map-js "^1.2.2"
+
+preact@11.0.0:
+  version "11.0.0"
+  resolved "https://registry.yarnpkg.com/preact/-/preact-11.0.0.tgz#2ee1a760aa7545b80cb27e26dda6328a6989fcca"
+  integrity sha512-LRTLKuSe6VYPhvBDjwFaX+nuZnpsw6IN2GSboisAvhGsncylBmrbDCERhgKDn6yP2mAwbGvsB5OVyTe33M8gBg==
 
 process-nextick-args@~2.0.0:
   version "2.0.1"

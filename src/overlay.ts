@@ -1,4 +1,4 @@
-import type { HtmlRow } from "./html.js";
+import type { Banner, ModelRow } from "./model.js";
 import type { Proposal, ProposalRow } from "./proposal.js";
 
 type Label = "changed" | "pending" | "confirmed";
@@ -9,12 +9,12 @@ type Label = "changed" | "pending" | "confirmed";
  * (after `apply`) are left alone.
  */
 export const overlayProposal = (
-  rows: HtmlRow[],
+  rows: ModelRow[],
   proposal: Proposal,
   locales: string[]
-): { rows: HtmlRow[]; summary: string } => {
+): { rows: ModelRow[]; banner?: Banner } => {
   const byId = new Map(rows.map((r) => [`${r.group}.${r.key}`, r]));
-  const overlaid = new Map<HtmlRow, HtmlRow>();
+  const overlaid = new Map<ModelRow, ModelRow>();
   const counts: Record<Label, number> = {
     changed: 0,
     pending: 0,
@@ -42,7 +42,7 @@ export const overlayProposal = (
         text: change.new,
         old: cell.text,
         changed: true,
-        title: "proposed change",
+        mark: "proposed" as const,
       };
     });
     const alreadyDone = label === "confirmed" && base.status === "approved";
@@ -56,7 +56,7 @@ export const overlayProposal = (
       cells,
     });
   }
-  const extra: HtmlRow[] = (["ambiguous", "unmatched"] as const).flatMap(
+  const extra: ModelRow[] = (["ambiguous", "unmatched"] as const).flatMap(
     (kind) =>
       proposal[kind].map((e) => ({
         group: kind,
@@ -65,17 +65,12 @@ export const overlayProposal = (
         cells: locales.map((l) => ({ text: e.values[l] ?? "" })),
       }))
   );
-  const parts = [
-    counts.changed && `${counts.changed} changed`,
-    counts.pending && `${counts.pending} pending (partial)`,
-    counts.confirmed && `${counts.confirmed} confirmed`,
-    extra.length && `${extra.length} need manual resolution`,
-  ].filter(Boolean);
+  const changed = counts.changed + counts.pending + counts.confirmed;
   return {
     rows: [...rows.map((r) => overlaid.get(r) ?? r), ...extra],
-    summary:
-      parts.length === 0
-        ? ""
-        : `Import proposal pending: ${parts.join(", ")}. Old values are struck through; nothing is written until \`apply\`.`,
+    banner:
+      changed + extra.length === 0
+        ? undefined
+        : { kind: "proposal", ...counts, manual: extra.length },
   };
 };

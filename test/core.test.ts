@@ -12,7 +12,8 @@ import {
   status,
 } from "../src/commands.js";
 import { flatten, serialize, unflatten } from "../src/flatten.js";
-import { renderHtml } from "../src/html.js";
+import { renderReport } from "../src/html.js";
+import type { Model } from "../src/model.js";
 import {
   deriveState,
   getRows,
@@ -24,11 +25,13 @@ import {
 import { parseDelimited, serializeDelimited } from "../src/table.js";
 import {
   copyFixture,
+  EXTERNAL_URL,
   FIXTURE_DIR,
   FIXTURE_MISSING,
   readJson,
   readText,
   syntheticConfig,
+  withoutXmlNamespaces,
 } from "./helpers.js";
 
 describe("flatten / unflatten on the fixture files", () => {
@@ -128,8 +131,8 @@ describe("delimited text", () => {
   });
 });
 
-describe("html renderer", () => {
-  const model = {
+describe("static report", () => {
+  const model: Model = {
     title: "<b>T</b>",
     columns: ["en"],
     rows: [
@@ -140,21 +143,21 @@ describe("html renderer", () => {
         cells: [{ text: "</script><img src=x onerror=alert(1)>" }],
       },
     ],
+    banners: [{ kind: "noRecords" }],
+    copyHeader: true,
+    uiLocale: "auto",
   };
 
   it("escapes data and the title, and loads nothing from the network", () => {
-    const html = renderHtml(model);
+    const html = renderReport(model);
     expect(html).not.toContain("</script><img");
     expect(html).toContain("&lt;b&gt;T&lt;/b&gt;");
-    expect(html).not.toContain("http://");
-    expect(html).not.toContain("https://");
+    expect(withoutXmlNamespaces(html)).not.toMatch(EXTERNAL_URL);
     expect(html).toContain("color-scheme:light dark");
   });
 
-  it("shows the banner text in the data", () => {
-    expect(renderHtml({ ...model, banner: "Hello banner" })).toContain(
-      "Hello banner"
-    );
+  it("embeds the structured banners for the UI to translate", () => {
+    expect(renderReport(model)).toContain('"banners":[{"kind":"noRecords"}]');
   });
 });
 
@@ -195,10 +198,12 @@ describe("status layer (temp data)", () => {
     const cfg = syntheticConfig();
     expect(status(cfg, {}).hint).toBe(NO_RECORDS_HINT);
     const { file } = report(cfg);
-    expect(readFileSync(file, "utf8")).toContain("No status records yet");
+    expect(readFileSync(file, "utf8")).toContain(
+      '"banners":[{"kind":"noRecords"}]'
+    );
     init(cfg, { force: false });
     report(cfg);
-    expect(readFileSync(file, "utf8")).not.toContain("No status records yet");
+    expect(readFileSync(file, "utf8")).toContain('"banners":[]');
   });
 
   it("check passes on keys/order and flags only empty values (fixture copy)", () => {

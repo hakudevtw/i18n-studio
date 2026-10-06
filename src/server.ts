@@ -1,22 +1,43 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { ASSETS, readAsset } from "./assets.js";
 import { buildModel } from "./commands.js";
 import type { Config } from "./config.js";
-import { renderHtml } from "./html.js";
+import { renderShell } from "./html.js";
 
 const HOST = "127.0.0.1";
 const DEFAULT_PORT = 4321;
 const PORT_TRIES = 10;
 const CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 const hostsFor = (port: number) =>
   new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
 
+type Reply = { body: string; type: string };
+
+/** GET routes. The request only selects a key; it is never turned into a file path. */
+const route = (config: Config, path: string): Reply | undefined => {
+  if (path === "/") {
+    return { body: renderShell(), type: "text/html" };
+  }
+  if (path === "/api/model") {
+    return {
+      body: JSON.stringify(buildModel(config)),
+      type: "application/json",
+    };
+  }
+  if (Object.hasOwn(ASSETS, path)) {
+    const asset = ASSETS[path as keyof typeof ASSETS];
+    return { body: readAsset(asset.file), type: asset.type };
+  }
+  return;
+};
+
 /**
  * Read-only local server for the report page. Loopback only, GET/HEAD only, Host
- * header checked (DNS rebinding), no CORS. Each request re-reads the files, so a
- * refresh always shows the current state.
+ * header checked (DNS rebinding), no CORS. `/api/model` re-reads the files on every
+ * request, so a refresh always shows the current state.
  */
 export const startStudio = async (
   config: Config,
@@ -30,6 +51,7 @@ export const startStudio = async (
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
         "content-security-policy": CSP,
+        "x-frame-options": "DENY",
       });
       res.end(body);
     };
@@ -39,11 +61,10 @@ export const startStudio = async (
     if (req.method !== "GET" && req.method !== "HEAD") {
       return send(405, "read-only");
     }
-    if (new URL(req.url ?? "/", "http://localhost").pathname !== "/") {
-      return send(404, "not found");
-    }
     try {
-      send(200, renderHtml(buildModel(config)), "text/html");
+      const path = new URL(req.url ?? "/", "http://localhost").pathname;
+      const found = route(config, path);
+      send(found ? 200 : 404, found?.body ?? "not found", found?.type);
     } catch (e) {
       send(500, `error: ${(e as Error).message}`);
     }

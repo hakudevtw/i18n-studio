@@ -8,7 +8,8 @@ import {
 import { dirname, join, relative } from "node:path";
 import { type Catalog, loadCatalog, saveMessages } from "./catalog.js";
 import type { Config } from "./config.js";
-import { type HtmlModel, type HtmlRow, renderHtml } from "./html.js";
+import { renderReport } from "./html.js";
+import type { Banner, Model, ModelRow } from "./model.js";
 import { overlayProposal } from "./overlay.js";
 import type { ProblemKind } from "./states.js";
 import {
@@ -343,19 +344,22 @@ export const exportRows = async (
 export const buildModel = (
   config: Config,
   opts: { proposal?: string } = {}
-): HtmlModel => {
+): Model => {
   const catalog = loadCatalog(config);
   const locales = localesOf(config, catalog);
-  let rows: HtmlRow[] = getRows(config, catalog).map((r) => ({
+  let rows: ModelRow[] = getRows(config, catalog).map((r) => ({
     group: r.ns,
     key: r.key,
     status: r.state,
     cells: locales.map((l) => ({
       text: r.values[l],
       changed: r.changedLocales.includes(l),
+      mark: r.changedLocales.includes(l) ? ("changed" as const) : undefined,
     })),
   }));
-  const banners = hasRecords(config, catalog) ? [] : [NO_RECORDS_HINT];
+  const banners: Banner[] = hasRecords(config, catalog)
+    ? []
+    : [{ kind: "noRecords" }];
   const proposalFile = opts.proposal ?? join(config.reportDir, "proposal.json");
   if (existsSync(proposalFile)) {
     const overlay = overlayProposal(
@@ -364,12 +368,15 @@ export const buildModel = (
       locales
     );
     rows = overlay.rows;
-    banners.push(overlay.summary);
+    if (overlay.banner) {
+      banners.push(overlay.banner);
+    }
   }
   return {
     title: "Translation status",
     copyHeader: config.copyHeader,
-    banner: banners.filter(Boolean).join(" ") || undefined,
+    banners,
+    uiLocale: config.uiLocale,
     columns: locales,
     rows,
   };
@@ -379,6 +386,6 @@ export const buildModel = (
 export const report = (config: Config, opts: { proposal?: string } = {}) => {
   const file = join(config.reportDir, "report.html");
   mkdirSync(config.reportDir, { recursive: true });
-  writeFileSync(file, renderHtml(buildModel(config, opts)));
+  writeFileSync(file, renderReport(buildModel(config, opts)));
   return { file };
 };

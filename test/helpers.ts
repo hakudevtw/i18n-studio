@@ -81,3 +81,8 @@ export const readText = (config: Config, lang: string, ns: string) =>
 
 export const readJson = (config: Config, lang: string, ns: string) =>
   JSON.parse(readText(config, lang, ns));
+
+// Preact carries XML namespace URIs (SVG/MathML); they are identifiers, never fetched.
+const XML_NAMESPACE = /http:\/\/www\.w3\.org\/[\w/]+/g;
+export const EXTERNAL_URL = /https?:\/\//;
+export const withoutXmlNamespaces = (s: string) => s.replace(XML_NAMESPACE, "");

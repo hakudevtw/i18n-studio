@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { UI_LOCALES, type UiLocaleSetting } from "./model.js";
 import {
   BUILTIN_STORED,
   DEFAULT_EXPORT_STATES,
@@ -35,6 +36,8 @@ export type Config = {
   namespaceOrder: string[];
   excludeNamespaces: string[];
   indent: Indent;
+  /** Language of the studio/report page; "auto" follows the browser. */
+  uiLocale: UiLocaleSetting;
 };
 
 export const DEFAULTS = {
@@ -49,6 +52,7 @@ export const DEFAULTS = {
   namespaceOrder: [],
   excludeNamespaces: [],
   indent: "auto",
+  uiLocale: "auto",
 } as const satisfies Partial<Record<keyof Config, unknown>>;
 
 export type ConfigFlags = {
@@ -61,11 +65,12 @@ export type ConfigFlags = {
   port?: string;
   "fail-on"?: string;
   indent?: string;
+  "ui-lang"?: string;
 };
 
 export const CONFIG_FILE = "i18n-studio.config.json";
 
-type Kind = "string" | "boolean" | "port" | "strings" | "indent";
+type Kind = "string" | "boolean" | "port" | "strings" | "indent" | "uiLocale";
 /** Config-file keys and their types. Anything else is rejected. */
 const FILE_SCHEMA: Record<string, Kind> = {
   dir: "string",
@@ -83,6 +88,7 @@ const FILE_SCHEMA: Record<string, Kind> = {
   namespaceOrder: "strings",
   excludeNamespaces: "strings",
   indent: "indent",
+  uiLocale: "uiLocale",
 };
 
 const DIGITS = /^\d+$/;
@@ -97,7 +103,11 @@ const isIndent = (v: unknown): v is Indent =>
   v === "auto" ||
   (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_INDENT);
 
+const isUiLocale = (v: unknown): v is UiLocaleSetting =>
+  v === "auto" || (UI_LOCALES as readonly unknown[]).includes(v);
+
 const VALID: Record<Kind, (v: unknown) => boolean> = {
+  uiLocale: isUiLocale,
   string: (v) => typeof v === "string" && v !== "",
   boolean: (v) => typeof v === "boolean",
   port: isPort,
@@ -106,6 +116,7 @@ const VALID: Record<Kind, (v: unknown) => boolean> = {
   indent: isIndent,
 };
 const EXPECTED: Record<Kind, string> = {
+  uiLocale: `"auto" or one of ${UI_LOCALES.join(", ")}`,
   string: "a non-empty string",
   boolean: "true or false",
   port: "an integer between 0 and 65535",
@@ -166,6 +177,12 @@ const flagValues = (flags: ConfigFlags): Values => {
       : flags.indent;
     if (!isIndent(out.indent)) {
       throw new Error(`--indent must be ${EXPECTED.indent}`);
+    }
+  }
+  if (flags["ui-lang"] !== undefined) {
+    out.uiLocale = flags["ui-lang"];
+    if (!isUiLocale(out.uiLocale)) {
+      throw new Error(`--ui-lang must be ${EXPECTED.uiLocale}`);
     }
   }
   return out;
@@ -248,6 +265,7 @@ export const configFromArgs = (
     namespaceOrder: pick("namespaceOrder", "namespaceOrder"),
     excludeNamespaces: pick("excludeNamespaces", "excludeNamespaces"),
     indent: pick("indent", "indent"),
+    uiLocale: pick("uiLocale", "uiLocale"),
   };
   validateStates(config);
   return config;
@@ -270,5 +288,6 @@ export const baseConfig = (
   namespaceOrder: [],
   excludeNamespaces: [],
   indent: DEFAULTS.indent,
+  uiLocale: DEFAULTS.uiLocale,
   ...overrides,
 });
