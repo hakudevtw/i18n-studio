@@ -121,3 +121,54 @@ describe("Copy as TSV text", () => {
     expect(tsvText(rows.slice(1), columns, [1], false)).toBe("approved\tk2\t");
   });
 });
+
+describe("locale resolution with the language switcher", () => {
+  const languages = ["ja-JP"];
+
+  it("puts a remembered choice between ?lang= and uiLocale", () => {
+    expect(
+      resolveLocale({ query: "ko", stored: "zh-TW", setting: "en", languages })
+    ).toBe("ko");
+    expect(resolveLocale({ stored: "zh-TW", setting: "en", languages })).toBe(
+      "zh-TW"
+    );
+    expect(resolveLocale({ stored: "xx", setting: "ko", languages })).toBe(
+      "ko"
+    );
+    expect(resolveLocale({ stored: null, languages })).toBe("ja");
+  });
+
+  it("ignores the remembered choice when the switcher is off, but keeps ?lang=", () => {
+    expect(
+      resolveLocale({
+        stored: "zh-TW",
+        switcher: false,
+        setting: "ko",
+        languages,
+      })
+    ).toBe("ko");
+    expect(resolveLocale({ stored: "zh-TW", switcher: false, languages })).toBe(
+      "ja"
+    );
+    expect(
+      resolveLocale({
+        query: "en",
+        stored: "zh-TW",
+        switcher: false,
+        languages,
+      })
+    ).toBe("en");
+  });
+});
+
+describe("plural helper", () => {
+  it("picks .one / .other by the locale's rules", () => {
+    expect(makeT("en").tn("bar.pending", 1)).toBe("1 pending change");
+    expect(makeT("en").tn("bar.pending", 3)).toBe("3 pending changes");
+    expect(makeT("en").tn("bar.pending", 0)).toBe("0 pending changes");
+    expect(makeT("ko").tn("bar.pending", 1)).toBe("대기 중인 변경 1건");
+    expect(makeT("ja").tn("bulk.set", 2)).toBe(
+      "選択した 2 行のステータスを設定"
+    );
+  });
+});

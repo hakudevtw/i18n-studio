@@ -5,6 +5,7 @@ import { join } from "node:path";
 export const ASSETS = {
   "/app.js": { file: "app.js", type: "text/javascript" },
   "/app.css": { file: "app.css", type: "text/css" },
+  "/favicon.svg": { file: "favicon.svg", type: "image/svg+xml" },
 } as const;
 
 /** dist/ui next to the compiled code, or ../dist/ui when running from src (tests). */

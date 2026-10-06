@@ -25,7 +25,7 @@ i18n-studio --help                                         # or: i18n-studio <co
 | `status [--ns x]` | Row counts per state, overall and per namespace. Hints to run `init` when there are no records. |
 | `check [--fail-on a,b] [--format text\|github\|json]` | Reports problems as **warnings** and exits 0. Only `status-file` problems (malformed status file, unreadable catalog) and the kinds in `failOn` exit 1. Kinds: `status-file`, `missing-key`, `orphan-key`, `empty`, `order`, `stale`, `edited`, `new`, `ai-draft`, `in-review`. `--format github` prints GitHub Actions annotations (`::warning file=...,title=i18n-studio::...`, `::error` for failing kinds) so a CI step can annotate PRs without failing. Whether CI fails is the consuming repo's workflow decision; the package only provides exit codes and annotations. |
 | `report [--open]` | One self-contained `report.html` in the report dir: status first, then key and one column per language; namespace sidebar, search, status/language filters, copy visible rows as TSV. Cells changed since the recorded state are highlighted. |
-| `studio [--port n] [--open]` | Serve the report at `http://127.0.0.1:<port>/` (read-only; refresh to see current data; Ctrl+C stops it). The page is a small Preact app served as static `app.js`/`app.css` plus `GET /api/model`. It can save through `POST /api/save` unless `readOnly` (see "Saving from the studio"). |
+| `studio [--port n] [--open\|--no-open]` | Serve the studio at `http://127.0.0.1:<port>/` (loopback only; refresh to see current data; Ctrl+C stops it). It browses and, unless `readOnly`, edits (see "Editing in the studio"). `--open` / config `open` opens only the base URL (never the token). |
 | `init [--force]` | One-time baseline: every row with all languages non-empty becomes `approved`. Rows with any empty value get no record (they show `missing`). Refuses to overwrite status files without `--force`. |
 | `draft [keys...] [--ns y]` | Mark rows `ai-draft` (run after writing translations). |
 | `export [--ns x] [--all] [--format tsv\|xlsx\|csv] [--out f]` | All languages in one file, one row per key. Default: rows needing review (ai-draft, edited, new, stale, missing); `--all`: everything. Exported rows become `in-review`. |
@@ -33,6 +33,7 @@ i18n-studio --help                                         # or: i18n-studio <co
 | `apply [proposal.json]` | Write accepted rows to the messages JSON and update status. |
 | `approve [keys...] [--ns y] [--all-edited]` | Re-baseline hashes and mark rows `approved`. |
 | `mark <state> [keys...] [--ns x]` | Set a stored state (`ai-draft`, `in-review`, `approved`, `archived`, or a `customStates` label) on rows. Needs keys or `--ns`. |
+| `prune [keys...] [--ns x] [--yes]` | Delete **archived** keys from every language's JSON and from the status files. Without `--yes` it only lists them (dry run). See "Archived rows are a soft delete". |
 | `set <lang> <ns.key> "<text>"` | Manual single-cell edit; the row then shows as `edited` (not auto-approved). The key must exist. |
 
 Keys are `<namespace>.<dotted.path>`; array indices are numeric segments (e.g. `faq-page.crj_support.faqs.0.question`).
@@ -69,6 +70,9 @@ Global flags work anywhere on the command line. A config file is optional. Prece
 | `namespaceOrder` | none | `[]` | These namespaces first, the rest alphabetically. |
 | `excludeNamespaces` | none | `[]` | Namespaces ignored everywhere. |
 | `readOnly` | `--read-only` | `false` | The studio server refuses `POST /api/save` (403) and the model carries `readOnly: true`. The static `report` is always read-only. |
+| `languageSwitcher` | `--no-language-switcher` | `true` | Show a language select (en, ko, zh-TW, ja) in the page's top bar. When off, a remembered choice is ignored (`?lang=` still works). |
+| `showArchived` | `--show-archived` / `--no-show-archived` | `false` | Initial state of the page's "Show archived" toggle. Only the page changes; `check`, `export`, `status`, `init` and `prune` are unaffected. |
+| `open` | `--open` / `--no-open` | `false` | `studio` opens the browser at the base URL when it starts (`--no-open` wins). `report --open` stays a plain flag. |
 | `uiLocale` | `--ui-lang <auto\|en\|ko\|zh-TW\|ja>` | `auto` | Language of the studio/report page. `auto` follows the browser; `?lang=ko` in the URL overrides everything. |
 | `indent` | `--indent n\|tab\|auto` | `auto` | JSON indent when writing: `auto` keeps each file's indent (2 if it has none); a number 1-8 or `tab` forces one. Each file's trailing-newline convention is always kept. |
 | none | `--config <file>` | `./i18n-studio.config.json` if present | Config file path. |
@@ -87,7 +91,7 @@ Alternative directory layouts (for example flat `<lang>.json` files) are not sup
 
 ### Page language
 
-The page (studio and static report) ships in `en`, `ko`, `zh-TW` and `ja`. Resolution order: `?lang=` query > `uiLocale` / `--ui-lang` > browser language (`zh-TW`/`zh-Hant`/`zh-HK` map to `zh-TW`, `ko*`, `ja*`, anything else to `en`). The CLI output, `status`/`check` JSON and the TSV header row stay English. Custom states have no translation and show their raw name. The dictionaries are flat JSON files in `src/ui/locales/`. **The ko / zh-TW / ja translations were AI-drafted; reviews and corrections are welcome.**
+The page (studio and static report) ships in `en`, `ko`, `zh-TW` and `ja`. Resolution order: `?lang=` query > the language you last picked in the top-bar switcher (remembered in `localStorage`, session-only if storage is blocked; ignored when `languageSwitcher` is off) > `uiLocale` / `--ui-lang` > browser language (`zh-TW`/`zh-Hant`/`zh-HK` map to `zh-TW`, `ko*`, `ja*`, anything else to `en`). The CLI output, `status`/`check` JSON and the TSV header row stay English. Custom states have no translation and show their raw name. The dictionaries are flat JSON files in `src/ui/locales/`. **The ko / zh-TW / ja translations were AI-drafted; reviews and corrections are welcome.**
 
 ## Layout and conventions
 
@@ -142,6 +146,27 @@ Derived (never stored), with precedence **missing > stale > edited/new > stored 
 }
 ```
 
+## Editing in the studio
+
+Unless `readOnly`, the studio edits like Prisma Studio: changes are **staged** and written only when you press **Save** (one unified batch, all or nothing).
+
+- **Cells**: double-click, Enter or F2 opens a textarea (multi-line values are fine). Enter commits, Shift+Enter adds a line, Esc cancels, Tab / Shift+Tab commit and move on, leaving the editor commits. IME composition is respected. Typing the original value back removes the change, so the count is always truthful.
+- **Staged state**: staged cells show the old value struck through and the new one below with a dot; the bottom bar shows "N pending changes". Click it to list exactly what will be written (row, language or status, old to new, long text truncated); click an entry to jump to the cell, or revert it individually. Discard asks for confirmation. A "leave this page?" guard is active while changes are pending.
+- **Save** (button or Ctrl/Cmd+S) first commits any open editor, then sends one batch with the value you saw (`expectedOld`) for every cell and the status you saw for every row.
+- **Conflicts**: if a value or status changed on disk since you loaded the page, nothing is saved; every staged edit is kept and each conflicted cell shows what is on disk with **Keep mine** (compare against the disk value from now on) or **Use theirs** (drop my edit).
+- **Source language**: editing it is allowed but Save first asks, stating how many rows with existing translations will become stale; the toast afterwards reports the server's count.
+- **Status**: the status badge opens a menu of the storable states (built in plus `customStates`, never derived ones); it is staged like any edit and applied after the cell edits of the same row, so approving re-baselines. A checkbox column and "Set status for N selected" stage a status for many rows.
+- **Keyboard**: arrows, Home/End, Page Up/Down move the selected cell; Enter/F2 edit; Space selects the row; Ctrl/Cmd+S saves; `?` opens a cheat sheet. The grid is one focusable widget (`role="grid"`, `aria-activedescendant`) with a visible focus ring.
+- **Copy as TSV** copies the *current* values, including staged ones.
+- Menus and dialogs render in a top-level layer (never clipped by the scrolling table) and close on Esc, outside click, scroll or resize, returning focus to their trigger.
+- The static `report` and `--read-only` studio render none of this.
+
+### Archived rows are a soft delete
+
+`mark archived <keys>` (or the status menu) retires a key without touching the JSON, so application code and types keep working. Archived rows are never `missing`, `stale` or `edited`; `check` ignores their empty or missing values; the default `export` leaves them out (still in `--all`); `init` skips them (and `init --force` keeps their records); `status` counts them separately; the page hides them behind "Show archived" (read-only except for changing their status).
+
+`prune [keys...] [--ns x] [--yes]` is the only command that deletes keys: it removes archived keys from **every** language's JSON (source included) and from the status files, through the single atomic write path, preserving key order, indent and trailing newline. Without `--yes` it only prints what it would delete. It refuses to leave a gap in an array (prune the whole array or only trailing items). **The tool cannot know whether application code still references a key; check usage first.**
+
 ## Saving from the studio
 
 The studio server has exactly one write endpoint, `POST /api/save` (the edit UI that uses it comes later; the client is `src/ui/api.ts`). The body is JSON with strict, string-only fields:
@@ -163,6 +188,7 @@ The studio server has exactly one write endpoint, `POST /api/save` (the edit UI 
 ## Security notes
 
 - **Write protection** (`POST /api/save`): exact `Host` allowlist, an exact `Origin` (`http://127.0.0.1:<port>`, `http://localhost:<port>` or `http://[::1]:<port>`; missing or any other value is refused), `Sec-Fetch-Site` must be `same-origin` when present, a per-start random token (256 bits, compared in constant time) sent as `X-Studio-Token`, `Content-Type: application/json`, a 1 MiB body limit. No CORS headers are ever sent, so other sites cannot read or write. The token is embedded only in the shell page (a `<meta>` tag, never a URL), is also required for `GET /api/model`, and is never logged or put in error bodies. Request bodies are not logged. Use `--read-only` to disable writing.
+- The shell links `/favicon.svg` (original artwork, allowlisted like the other assets; the static report embeds it as a `data:` URI). CSP is `default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`.
 - The studio shell has no inline script or style (`script-src 'self'; style-src 'self'; connect-src 'self'`, `frame-ancestors 'none'`, plus `X-Frame-Options: DENY`). It serves a fixed allowlist of files (`/`, `/app.js`, `/app.css`) and `/api/model`; request paths are never mapped to file paths.
 - The static `report` stays one self-contained file (JS/CSS inlined, model embedded as JSON with `<` escaped, no network). Its inline script is only used when you open that file yourself.
 
@@ -176,6 +202,11 @@ The studio server has exactly one write endpoint, `POST /api/save` (the edit UI 
 
 - Translating: edit `<dir>/<lang>/<ns>.json` in source key order, then run `i18n-studio --dir <dir> draft --ns <ns>` (or pass explicit `<ns>.<key>` arguments) so the rows show `ai-draft`. Use `set <lang> <ns.key> "<text>"` for one-off fixes. Never edit status files by hand. Run `check` afterwards.
 - Completing an import: pipe the pasted sheet in (`import -`), open `proposal.json` in the report dir, and for each entry in `ambiguous` / `unmatched` set `resolve` to the correct id(s) from `candidates` (or look the id up in the source files). Set `"reject": true` on rows that look wrong and fix `changes.<lang>.new` if needed. Then `apply`. Do not edit `old` or `id`.
+- Removing a key: **never delete JSON keys yourself and never run `prune --yes` without explicit user approval.** Run `mark archived <ns.key>`, run `prune` (dry run) to list what would be deleted, check that no code references the keys, show the list to the user and ask. Only after they approve run `prune --yes`.
+
+## Testing and contributing
+
+`yarn test` (Vitest, including jsdom component tests), `yarn test:coverage` (v8 coverage: text + lcov), `yarn typecheck`, `yarn lint`, `yarn build`. CI runs them on Node 22. See [CONTRIBUTING.md](CONTRIBUTING.md) for the jsdom-vs-happy-dom choice, adding a UI language or config option, and the security expectations (no runtime dependencies, no inline scripts, no network).
 
 ## Develop with yarn link
 

@@ -40,6 +40,12 @@ export type Config = {
   uiLocale: UiLocaleSetting;
   /** The studio server refuses `POST /api/save`. */
   readOnly: boolean;
+  /** Show the language select in the studio/report top bar. */
+  languageSwitcher: boolean;
+  /** `studio` opens the browser when it starts (base URL only). */
+  open: boolean;
+  /** Initial state of the "Show archived" toggle in the page; nothing else changes. */
+  showArchived: boolean;
 };
 
 export const DEFAULTS = {
@@ -56,6 +62,9 @@ export const DEFAULTS = {
   indent: "auto",
   uiLocale: "auto",
   readOnly: false,
+  languageSwitcher: true,
+  open: false,
+  showArchived: false,
 } as const satisfies Partial<Record<keyof Config, unknown>>;
 
 export type ConfigFlags = {
@@ -70,6 +79,9 @@ export type ConfigFlags = {
   indent?: string;
   "ui-lang"?: string;
   "read-only"?: boolean;
+  "no-language-switcher"?: boolean;
+  "show-archived"?: boolean;
+  "no-show-archived"?: boolean;
 };
 
 export const CONFIG_FILE = "i18n-studio.config.json";
@@ -94,6 +106,9 @@ const FILE_SCHEMA: Record<string, Kind> = {
   indent: "indent",
   uiLocale: "uiLocale",
   readOnly: "boolean",
+  languageSwitcher: "boolean",
+  open: "boolean",
+  showArchived: "boolean",
 };
 
 const DIGITS = /^\d+$/;
@@ -156,6 +171,7 @@ const readConfigFile = (file: string): Values => {
   return data as Values;
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one flag per branch
 const flagValues = (flags: ConfigFlags): Values => {
   const out: Values = {};
   if (flags.source !== undefined) {
@@ -183,6 +199,14 @@ const flagValues = (flags: ConfigFlags): Values => {
     if (!isIndent(out.indent)) {
       throw new Error(`--indent must be ${EXPECTED.indent}`);
     }
+  }
+  if (flags["no-show-archived"]) {
+    out.showArchived = false;
+  } else if (flags["show-archived"]) {
+    out.showArchived = true;
+  }
+  if (flags["no-language-switcher"]) {
+    out.languageSwitcher = false;
   }
   if (flags["read-only"]) {
     out.readOnly = true;
@@ -275,6 +299,9 @@ export const configFromArgs = (
     indent: pick("indent", "indent"),
     uiLocale: pick("uiLocale", "uiLocale"),
     readOnly: pick("readOnly", "readOnly"),
+    languageSwitcher: pick("languageSwitcher", "languageSwitcher"),
+    open: pick("open", "open"),
+    showArchived: pick("showArchived", "showArchived"),
   };
   validateStates(config);
   return config;
@@ -299,5 +326,8 @@ export const baseConfig = (
   indent: DEFAULTS.indent,
   uiLocale: DEFAULTS.uiLocale,
   readOnly: DEFAULTS.readOnly,
+  languageSwitcher: DEFAULTS.languageSwitcher,
+  open: DEFAULTS.open,
+  showArchived: DEFAULTS.showArchived,
   ...overrides,
 });

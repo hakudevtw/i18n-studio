@@ -14,10 +14,15 @@ const HEAD =
 export const renderShell = (token: string, title = "Translation status") =>
   `<!doctype html>
 <html lang="en"><head>${HEAD}<meta name="studio-token" content="${escapeHtml(token)}"><title>${escapeHtml(title)}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/app.css"></head><body>
 <div id="root"></div>
 <script src="/app.js"></script></body></html>
 `;
+
+/** The icon as a data: URI, so the shared report stays one self-contained file. */
+const faviconDataUri = () =>
+  `data:image/svg+xml;base64,${Buffer.from(readAsset("favicon.svg")).toString("base64")}`;
 
 /** Keep an inlined script/style from closing or opening anything in the HTML parser. */
 const inlineSafe = (code: string, tag: "script" | "style") =>
@@ -35,6 +40,7 @@ export const renderReport = (model: Model): string => {
   );
   return `<!doctype html>
 <html lang="en"><head>${HEAD}<title>${escapeHtml(model.title)}</title>
+<link rel="icon" type="image/svg+xml" href="${faviconDataUri()}">
 <style>${inlineSafe(readAsset("app.css"), "style")}</style></head><body>
 <div id="root"></div>
 <script type="application/json" id="data">${data}</script>

@@ -13,6 +13,7 @@ const NASTY = [
 ];
 const DATA_BLOCK =
   /<script type="application\/json" id="data">([\s\S]*?)<\/script>/;
+const LINK_TAG = /<link [^>]*>/g;
 const CLOSE_SCRIPT = /<\/script>/g;
 
 describe("renderReport embedding", () => {
@@ -29,6 +30,9 @@ describe("renderReport embedding", () => {
     copyHeader: true,
     uiLocale: "ko",
     readOnly: true,
+    languageSwitcher: true,
+    showArchived: false,
+    storedStates: [],
   };
   const html = renderReport(model);
 
@@ -47,7 +51,12 @@ describe("renderReport embedding", () => {
 
   it("is self-contained: inlined assets, no external URLs", () => {
     expect(html).toContain("<style>");
-    expect(html).not.toContain("<link");
+    // The only <link> is the icon, embedded as a data: URI.
+    expect(html.match(LINK_TAG)).toHaveLength(1);
+    expect(html).toContain(
+      'rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,'
+    );
+    expect(html).not.toContain('href="/');
     expect(html).not.toContain("src=");
     expect(withoutXmlNamespaces(html)).not.toMatch(EXTERNAL_URL);
   });
@@ -58,6 +67,9 @@ describe("renderShell", () => {
     const html = renderShell("test-token");
     expect(html).toContain('<script src="/app.js"></script>');
     expect(html).toContain('<link rel="stylesheet" href="/app.css">');
+    expect(html).toContain(
+      '<link rel="icon" type="image/svg+xml" href="/favicon.svg">'
+    );
     expect(html).not.toContain("<style");
     expect(html).not.toContain("style=");
     expect(html.match(CLOSE_SCRIPT)).toHaveLength(1);

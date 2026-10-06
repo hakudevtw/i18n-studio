@@ -47,6 +47,12 @@ export type Model = {
   uiLocale: UiLocaleSetting;
   /** The server refuses writes (config `readOnly`); the static report is always read-only. */
   readOnly: boolean;
+  /** Show the language select in the top bar (config `languageSwitcher`). */
+  languageSwitcher: boolean;
+  /** Initial state of the "Show archived" toggle (the page does not remember changes). */
+  showArchived: boolean;
+  /** States a row can be set to (built in plus custom); never derived ones. */
+  storedStates: string[];
 };
 
 /** `POST /api/save` request. Every field is a string; ids are `<namespace>.<dotted.key>`. */

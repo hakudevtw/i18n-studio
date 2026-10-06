@@ -7,8 +7,16 @@ import { syntheticConfig } from "./helpers.js";
 import { call, getShellToken, start } from "./http.js";
 
 const CSP =
-  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
-const ROUTES = ["/", "/app.js", "/app.css", "/api/model", "/api/save", "/nope"];
+  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const ROUTES = [
+  "/",
+  "/app.js",
+  "/app.css",
+  "/favicon.svg",
+  "/api/model",
+  "/api/save",
+  "/nope",
+];
 
 describe("studio server: GET behaviour (regression of the read-only phase)", () => {
   it("serves a static shell on loopback with hardened headers", async () => {
@@ -19,6 +27,9 @@ describe("studio server: GET behaviour (regression of the read-only phase)", () 
     expect(res.headers["content-type"]).toBe("text/html; charset=utf-8");
     expect(res.body).toContain('<script src="/app.js"></script>');
     expect(res.body).toContain('href="/app.css"');
+    expect(res.body).toContain(
+      '<link rel="icon" type="image/svg+xml" href="/favicon.svg">'
+    );
     expect(res.body).not.toContain("<style");
     expect(res.body).not.toContain('id="data"');
     expect(res.headers["content-security-policy"]).toBe(CSP);
@@ -37,7 +48,18 @@ describe("studio server: GET behaviour (regression of the read-only phase)", () 
     expect(css.status).toBe(200);
     expect(css.headers["content-type"]).toBe("text/css; charset=utf-8");
     expect(css.headers["content-security-policy"]).toBe(CSP);
+    const icon = await call(port, { path: "/favicon.svg" });
+    expect(icon.status).toBe(200);
+    expect(icon.headers["content-type"]).toBe("image/svg+xml; charset=utf-8");
+    expect(icon.headers["content-security-policy"]).toBe(CSP);
+    expect(icon.headers["cache-control"]).toBe("no-store");
+    expect(icon.body).toBe(readAsset("favicon.svg"));
+    expect(icon.body).toContain("<svg");
     for (const path of [
+      "/favicon.ico",
+      "/favicon.png",
+      "/favicon.svg/",
+      "/Favicon.svg",
       "/app.js.map",
       "/App.js",
       "/ui/app.js",

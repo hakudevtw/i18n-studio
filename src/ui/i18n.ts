@@ -27,17 +27,25 @@ export const mapLanguage = (tag: string | undefined): UiLocale => {
   return lower.startsWith("ja") ? "ja" : "en";
 };
 
-/** Query (`?lang=ko`) > configured uiLocale > browser language. */
+const shipped = (value: string | null | undefined) =>
+  UI_LOCALES.find((l) => l.toLowerCase() === value?.toLowerCase());
+
+/**
+ * Query (`?lang=ko`) > the user's remembered choice (only while the switcher is on) >
+ * configured uiLocale > browser language.
+ */
 export const resolveLocale = (opts: {
   query?: string | null;
+  stored?: string | null;
+  switcher?: boolean;
   setting?: UiLocaleSetting;
   languages?: readonly string[];
 }): UiLocale => {
-  const fromQuery = UI_LOCALES.find(
-    (l) => l.toLowerCase() === opts.query?.toLowerCase()
-  );
-  if (fromQuery) {
-    return fromQuery;
+  const chosen =
+    shipped(opts.query) ??
+    (opts.switcher === false ? undefined : shipped(opts.stored));
+  if (chosen) {
+    return chosen;
   }
   if (opts.setting && opts.setting !== "auto") {
     return opts.setting;
@@ -54,7 +62,20 @@ export const makeT = (locale: UiLocale) => {
       VARIABLE,
       (whole, name: string) => String(vars[name] ?? whole)
     );
-  return { t, has };
+  const plurals = new Intl.PluralRules(locale);
+  /** `key.one` / `key.other` chosen with the locale's plural rules. */
+  const tn = (
+    key: string,
+    n: number,
+    vars: Record<string, string | number> = {}
+  ) => {
+    const form = plurals.select(n) === "one" ? "one" : "other";
+    return t(has(`${key}.${form}`) ? `${key}.${form}` : `${key}.other`, {
+      n,
+      ...vars,
+    });
+  };
+  return { t, tn, has };
 };
 
 export type Translator = ReturnType<typeof makeT>;

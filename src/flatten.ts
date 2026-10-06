@@ -55,3 +55,25 @@ export const serialize = (
   indent: number | "tab" = 2
 ): string =>
   `${JSON.stringify(obj, null, indent === "tab" ? "\t" : indent)}${trailingNewline ? "\n" : ""}`;
+
+const NUMERIC = /^\d+$/;
+
+/** The first array whose indices are not 0..n-1 (what removing keys can leave behind). */
+export const findArrayGap = (pairs: Flat): string | undefined => {
+  const indices = new Map<string, Set<number>>();
+  for (const [path] of pairs) {
+    const parts = path.split(".");
+    for (const [i, part] of parts.entries()) {
+      if (NUMERIC.test(part)) {
+        const owner = parts.slice(0, i).join(".");
+        indices.set(owner, (indices.get(owner) ?? new Set()).add(Number(part)));
+      }
+    }
+  }
+  for (const [owner, set] of indices) {
+    if (set.size !== Math.max(...set) + 1) {
+      return owner;
+    }
+  }
+  return;
+};

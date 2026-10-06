@@ -117,6 +117,10 @@ export const deriveState = (
     ? Object.keys(values).filter((l) => hash(values[l]) !== record.hashes[l])
     : [];
   const withState = (state: State) => ({ state, changedLocales });
+  // Soft delete: an archived row is never missing/stale/edited, whatever its values.
+  if (record?.state === "archived") {
+    return withState("archived");
+  }
   if (!ignored && Object.values(values).some((v) => v === "")) {
     return withState("missing");
   }

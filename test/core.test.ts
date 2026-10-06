@@ -147,6 +147,9 @@ describe("static report", () => {
     copyHeader: true,
     uiLocale: "auto",
     readOnly: true,
+    languageSwitcher: true,
+    showArchived: false,
+    storedStates: [],
   };
 
   it("escapes data and the title, and loads nothing from the network", () => {

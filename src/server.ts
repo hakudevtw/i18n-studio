@@ -12,7 +12,7 @@ const DEFAULT_PORT = 4321;
 const PORT_TRIES = 10;
 const MAX_BODY = 1024 * 1024;
 const CSP =
-  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const JSON_TYPE = /^application\/json(?:\s*;\s*charset=utf-8)?$/i;
 
 const hostsFor = (port: number) =>

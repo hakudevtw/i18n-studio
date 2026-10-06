@@ -1,8 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
-import { type Catalog, loadCatalog, saveMessages } from "./catalog.js";
+import {
+  type Catalog,
+  loadCatalog,
+  messagesFile,
+  saveMessages,
+} from "./catalog.js";
 import type { Config } from "./config.js";
-import { atomicWriteAll } from "./fsx.js";
+import { findArrayGap } from "./flatten.js";
+import { atomicWriteAll, type WriteFile } from "./fsx.js";
 import { renderReport } from "./html.js";
 import type { Banner, Model, ModelRow } from "./model.js";
 import { overlayProposal } from "./overlay.js";
@@ -17,6 +23,7 @@ import {
   type Row,
   readStatus,
   type State,
+  statusFile,
   statusPath,
   storedStates,
 } from "./status.js";
@@ -89,11 +96,16 @@ export type Problem = {
 };
 
 type Found = Omit<Problem, "level">;
+type CheckContext = {
+  config: Config;
+  catalog: Catalog;
+  /** Addresses of archived rows: soft deleted, so empty/missing values are fine. */
+  archived: Set<string>;
+};
 
 /** Problems in one locale file, compared with the source locale's keys. */
 const checkFile = (
-  config: Config,
-  catalog: Catalog,
+  { config, catalog, archived }: CheckContext,
   lang: string,
   ns: string
 ): Found[] => {
@@ -103,7 +115,9 @@ const checkFile = (
     join(config.i18nDir, lang, `${ns}.json`)
   );
   const where = `${lang}/${ns}.json`;
-  const ignored = globMatcher(config.ignoreKeys);
+  const matchIgnored = globMatcher(config.ignoreKeys);
+  const ignored = (address: string) =>
+    matchIgnored(address) || archived.has(address);
   const found = (kind: ProblemKind, message: string): Found => ({
     kind,
     message: `${where}: ${message}`,
@@ -153,15 +167,19 @@ const collectProblems = (config: Config): Found[] => {
   } catch (e) {
     return [{ kind: "status-file", message: (e as Error).message }];
   }
+  const rows = getRows(config, catalog);
+  const archived = new Set(
+    rows.filter((r) => r.state === "archived").map((r) => r.address)
+  );
   const problems = catalog.namespaces.flatMap((ns) => [
     ...localesOf(config, catalog).flatMap((lang) =>
-      checkFile(config, catalog, lang, ns)
+      checkFile({ config, catalog, archived }, lang, ns)
     ),
     ...readStatus(config, ns).errors.map(
       (message): Found => ({ kind: "status-file", message })
     ),
   ]);
-  for (const row of getRows(config, catalog)) {
+  for (const row of rows) {
     if (STATE_KINDS.includes(row.state)) {
       problems.push({
         kind: row.state as ProblemKind,
@@ -202,13 +220,77 @@ export const init = (config: Config, { force }: { force: boolean }) => {
       `Status files already exist (${existing.length}, e.g. ${existing[0]}.tsv); use --force to overwrite`
     );
   }
+  // Archived rows keep their archived record; init never touches them.
+  const all = getRows(config, catalog);
+  const archived = all.filter((r) => r.state === "archived");
   for (const ns of existing) {
     rmSync(statusPath(config, ns), { force: true });
   }
+  markRows(config, catalog, archived, "archived");
   // Rows with an empty value in any locale get no record and show as missing.
-  const rows = getRows(config, catalog).filter((r) => r.state !== "missing");
+  const rows = all.filter(
+    (r) => r.state !== "missing" && r.state !== "archived"
+  );
   markRows(config, catalog, rows, "approved");
   return { approved: rows.length };
+};
+
+export type PruneListing = { address: string; values: Record<string, string> };
+
+/**
+ * Permanently delete archived keys from every locale's JSON and from the status files.
+ * Without `yes` it only lists them. The tool cannot know whether application code still
+ * references a key: check usage first.
+ */
+export const prune = (
+  config: Config,
+  scope: Scope,
+  { yes }: { yes: boolean }
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validate, list, then delete
+) => {
+  const catalog = loadCatalog(config);
+  const rows = selectRows(config, catalog, scope);
+  const notArchived = rows.filter((r) => r.state !== "archived");
+  if (scope.keys?.length && notArchived.length > 0) {
+    throw new Error(
+      `Not archived (run \`mark archived\` first): ${notArchived.map((r) => r.address).join(", ")}`
+    );
+  }
+  const archived = rows.filter((r) => r.state === "archived");
+  const listing: PruneListing[] = archived.map((r) => ({
+    address: r.address,
+    values: r.values,
+  }));
+  if (!yes || archived.length === 0) {
+    return { dryRun: !yes, deleted: 0, archived: listing };
+  }
+  const files: WriteFile[] = [];
+  for (const ns of new Set(archived.map((r) => r.ns))) {
+    const doomed = new Set(
+      archived.filter((r) => r.ns === ns).map((r) => r.key)
+    );
+    for (const lang of localesOf(config, catalog)) {
+      const kept = (catalog.messages[lang][ns] ?? []).filter(
+        ([key]) => !doomed.has(key)
+      );
+      const gap = findArrayGap(kept);
+      if (gap !== undefined) {
+        throw new Error(
+          `Pruning would leave a gap in the array "${gap}" in ${lang}/${ns}.json; prune the whole array or only its last items`
+        );
+      }
+      if (catalog.messages[lang][ns]) {
+        files.push(messagesFile(config, catalog, { lang, ns }, new Map(kept)));
+      }
+    }
+    const { records } = readStatus(config, ns);
+    for (const key of doomed) {
+      records.delete(key);
+    }
+    files.push(statusFile(config, catalog, ns, records));
+  }
+  atomicWriteAll(files);
+  return { dryRun: false, deleted: archived.length, archived: listing };
 };
 
 /** Set any stored state (built in or custom) on the selected rows. */
@@ -231,7 +313,7 @@ export const mark = (config: Config, state: string, scope: Scope) => {
 export const draft = (config: Config, scope: Scope) => {
   const catalog = loadCatalog(config);
   const rows = selectRows(config, catalog, scope).filter(
-    (r) => r.state !== "missing"
+    (r) => r.state !== "missing" && r.state !== "archived"
   );
   markRows(config, catalog, rows, "ai-draft");
   return { marked: rows.length };
@@ -296,7 +378,10 @@ export const exportRows = async (
   const all = selectRows(config, catalog, { ns: opts.ns });
   // Ignored keys are left out of the default set (they stay in --all).
   const toReview = all.filter(
-    (r) => !r.ignored && config.exportStates.includes(r.state)
+    (r) =>
+      !r.ignored &&
+      r.state !== "archived" &&
+      config.exportStates.includes(r.state)
   );
   const rows = opts.all ? all : toReview;
   const out = opts.out ?? join(config.reportDir, `review.${opts.format}`);
@@ -371,6 +456,9 @@ export const buildModel = (
     title: "Translation status",
     copyHeader: config.copyHeader,
     readOnly: config.readOnly,
+    languageSwitcher: config.languageSwitcher,
+    showArchived: config.showArchived,
+    storedStates: storedStates(config),
     banners,
     uiLocale: config.uiLocale,
     columns: locales,

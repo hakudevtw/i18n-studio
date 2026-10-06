@@ -408,7 +408,7 @@ describe("copyHeader and port", () => {
     const html = readFileSync(report(cfg).file, "utf8");
     expect(buildModel(cfg).copyHeader).toBe(false);
     expect(html).toContain('"copyHeader":false');
-    expect(html).not.toContain("localStorage");
+    expect(html).not.toContain("i18n-copy-header");
     expect(html).not.toContain('id="header"');
     expect(buildModel(syntheticConfig()).copyHeader).toBe(true);
   });
@@ -439,9 +439,15 @@ describe("page: sticky namespace rows", () => {
     );
     const js = readAsset("app.js");
     expect(js).toContain('class:"label"');
-    expect(js).toContain("colSpan:2");
+    expect(js).toContain("?3:2");
+  });
+
+  it("keeps overlays out of the clipped scroll area: menus are fixed-position", () => {
+    expect(readAsset("app.css")).toContain(".menu{position:fixed");
   });
 });
+
+const EXTERNAL_REFERENCE = /(?:src|href)="(?!data:)/;
 
 describe("uiLocale", () => {
   const cwd = tempDir();
@@ -470,8 +476,8 @@ describe("uiLocale", () => {
     const html = readFileSync(report(cfg).file, "utf8");
     expect(html).toContain('"uiLocale":"ja"');
     expect(html).toContain('id="data"');
-    expect(html).not.toContain('src="');
-    expect(html).not.toContain('href="');
+    expect(html).not.toMatch(EXTERNAL_REFERENCE);
+    expect(html).toContain('href="data:image/svg+xml;base64,');
   });
 });
 

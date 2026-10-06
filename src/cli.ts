@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import type { Server } from "node:http";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import {
@@ -11,11 +11,13 @@ import {
   init,
   mark,
   type Problem,
+  prune,
   report,
   set,
   status,
 } from "./commands.js";
 import { type ConfigFlags, configFromArgs } from "./config.js";
+import { type Opener, openWithSystem, shouldOpen, tryOpen } from "./open.js";
 import { apply, importFile } from "./proposal.js";
 import { startStudio } from "./server.js";
 import { allStates, type State } from "./status.js";
@@ -26,7 +28,7 @@ const COMMANDS: Record<string, { usage: string; summary: string }> = {
     summary: "Count rows per state, overall and per namespace.",
   },
   studio: {
-    usage: "studio [--port n] [--open]",
+    usage: "studio [--port n] [--open|--no-open]",
     summary:
       "Serve the report at http://127.0.0.1:<port>/ (read-only, loopback only). Refresh the page to see current data; Ctrl+C stops it. An explicit port (flag or config) is used as given; otherwise it starts at 4321 and walks up if taken.",
   },
@@ -74,6 +76,11 @@ const COMMANDS: Record<string, { usage: string; summary: string }> = {
     usage: "approve [keys...] [--ns y] [--all-edited]",
     summary: "Mark rows approved again after a manual edit.",
   },
+  prune: {
+    usage: "prune [keys...] [--ns x] [--yes]",
+    summary:
+      "Delete archived keys from every language's JSON and from the status files. Without --yes it only lists them (dry run). The tool cannot know whether code still references a key: check usage first, and never run --yes without approval.",
+  },
   set: {
     usage: 'set <lang> <ns.key> "<text>"',
     summary: "Edit one cell quickly; the row becomes edited.",
@@ -103,6 +110,9 @@ const helpText = (command?: string): string => {
     "  --fail-on <a,b>     problem kinds that make check exit 1 (config: failOn)",
     "  --indent <n|tab|auto> JSON indent when writing (config: indent; default auto = keep each file's)",
     "  --ui-lang <auto|en|ko|zh-TW|ja>  language of the studio/report page (config: uiLocale; default auto = browser)",
+    "  --no-language-switcher  hide the language select in the page top bar (config: languageSwitcher)",
+    "  --open / --no-open  studio opens the browser on start (config: open; --no-open wins; default off)",
+    "  --show-archived / --no-show-archived  initial state of the page's Show archived toggle (config: showArchived; default off; only the page changes)",
     "  --read-only         studio refuses to save edits (config: readOnly)",
     "  --config <file>     JSON config (default: ./i18n-studio.config.json if present); keys dir, source, statusDir, reportDir; flags win",
     "",
@@ -120,12 +130,6 @@ const helpText = (command?: string): string => {
 };
 
 const FORMATS = ["tsv", "csv", "xlsx"];
-
-const openFile = (file: string) => {
-  const openers: Record<string, string> = { darwin: "open", win32: "start" };
-  const cmd = openers[process.platform] ?? "xdg-open";
-  spawn(cmd, [file], { detached: true, stdio: "ignore" }).unref();
-};
 
 const countsLine = (states: string[], counts: Partial<Record<State, number>>) =>
   states
@@ -179,7 +183,32 @@ const formatCheck = (
   return lines.join("\n");
 };
 
+const humanPrune = (result: {
+  dryRun: boolean;
+  deleted: number;
+  archived: { address: string; values: Record<string, string> }[];
+}) => {
+  const lines = result.archived.map(
+    (r) =>
+      `${r.address}  ${Object.entries(r.values)
+        .map(([l, v]) => `${l}=${JSON.stringify(v)}`)
+        .join(" ")}`
+  );
+  if (result.archived.length === 0) {
+    return "no archived keys";
+  }
+  return [
+    ...lines,
+    result.dryRun
+      ? `dry run: ${result.archived.length} archived key(s) would be deleted. Check that no code uses them, then re-run with --yes.`
+      : `deleted ${result.deleted} key(s)`,
+  ].join("\n");
+};
+
 const human = (command: string, result: any, states: string[]): string => {
+  if (command === "prune") {
+    return humanPrune(result);
+  }
   if (command === "status") {
     return [
       ...(result.hint ? [result.hint] : []),
@@ -199,7 +228,8 @@ const human = (command: string, result: any, states: string[]): string => {
 export const run = async (
   argv: string[],
   write: (text: string) => void = (t) => process.stdout.write(t),
-  cwd = process.cwd()
+  cwd = process.cwd(),
+  deps: { open?: Opener; started?: (server: Server) => void } = {}
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: flat command dispatch
 ): Promise<number> => {
   const { values, positionals } = parseArgs({
@@ -215,12 +245,17 @@ export const run = async (
       format: { type: "string" },
       "copy-header": { type: "boolean" },
       "no-copy-header": { type: "boolean" },
+      "no-language-switcher": { type: "boolean" },
+      "show-archived": { type: "boolean" },
+      "no-show-archived": { type: "boolean" },
+      yes: { type: "boolean", default: false },
       "fail-on": { type: "string" },
       indent: { type: "string" },
       "ui-lang": { type: "string" },
       "read-only": { type: "boolean" },
       out: { type: "string" },
-      open: { type: "boolean", default: false },
+      open: { type: "boolean" },
+      "no-open": { type: "boolean" },
       help: { type: "boolean", short: "h", default: false },
       port: { type: "string" },
       dir: { type: "string" },
@@ -269,11 +304,12 @@ export const run = async (
     case "report":
       result = report(config);
       if (values.open) {
-        openFile((result as { file: string }).file);
+        (deps.open ?? openWithSystem)((result as { file: string }).file);
       }
       break;
     case "studio": {
       const { url, server } = await startStudio(config);
+      deps.started?.(server);
       // Clean shutdown: stop accepting, drop idle connections, let the process end.
       const stop = () => {
         server.close();
@@ -281,10 +317,10 @@ export const run = async (
       };
       process.once("SIGINT", stop);
       process.once("SIGTERM", stop);
-      result = { url, stop: "Ctrl+C" };
-      if (values.open) {
-        openFile(url);
-      }
+      // Only the base URL is ever opened: the token stays out of URLs and history.
+      const opened =
+        shouldOpen(values, config) && tryOpen(deps.open ?? openWithSystem, url);
+      result = { url, stop: "Ctrl+C", ...(opened && { opened }) };
       break;
     }
     case "init":
@@ -322,6 +358,9 @@ export const run = async (
         config,
         args[0] ?? join(config.reportDir, "proposal.json")
       );
+      break;
+    case "prune":
+      result = prune(config, scope, { yes: values.yes });
       break;
     case "set":
       if (args.length !== 3) {

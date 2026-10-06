@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>
+    .back{fill:#4f46e5}
+    .front{fill:#fff;stroke:#4f46e5;stroke-width:3}
+    .glyph-back{fill:none;stroke:#fff;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
+    .glyph-front{fill:none;stroke:#4f46e5;stroke-width:3.6;stroke-linecap:round;stroke-linejoin:round}
+    @media (prefers-color-scheme:dark){
+      .back{fill:#818cf8}
+      .front{fill:#11141b;stroke:#818cf8}
+      .glyph-back{stroke:#0b0d12}
+      .glyph-front{stroke:#c7d2fe}
+    }
+  </style>
+  <rect class="back" x="3" y="3" width="37" height="37" rx="9"/>
+  <path class="glyph-back" d="M21.5 9.5v3M11.5 14.5h20M26.5 15.5Q22 27 12.5 33M14.5 19.5Q22 28.5 31 33"/>
+  <rect class="front" x="24" y="24" width="37" height="37" rx="9"/>
+  <path class="glyph-front" d="M33 53l9.5-21 9.5 21M36.5 46h12"/>
+</svg>
