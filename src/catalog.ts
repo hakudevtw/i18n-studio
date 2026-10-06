@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Config } from "./config.js";
 import {
@@ -8,6 +8,7 @@ import {
   serialize,
   unflatten,
 } from "./flatten.js";
+import { atomicWriteAll, type WriteFile } from "./fsx.js";
 
 export type Catalog = {
   /** Non-source locales, auto-detected: sub-folders of i18nDir that contain *.json. */
@@ -79,13 +80,13 @@ export const loadCatalog = (config: Config): Catalog => {
   return { locales, namespaces, messages };
 };
 
-/** Write a locale file with keys in source-locale order (unknown keys keep their order, last). */
-export const saveMessages = (
+/** A locale file with keys in source-locale order (unknown keys keep their order, last). */
+export const messagesFile = (
   config: Config,
   catalog: Catalog,
   { lang, ns }: { lang: string; ns: string },
   values: Map<string, string>
-) => {
+): WriteFile => {
   const source = catalog.messages[config.sourceLocale][ns] ?? [];
   const known = new Set(source.map(([k]) => k));
   const pairs: Flat = [];
@@ -103,8 +104,19 @@ export const saveMessages = (
   const existing = existsSync(file) ? readFileSync(file, "utf8") : undefined;
   const indent =
     config.indent === "auto" ? detectIndent(existing ?? "") : config.indent;
-  writeFileSync(
-    file,
-    serialize(unflatten(pairs), existing?.endsWith("\n") ?? false, indent)
-  );
+  return {
+    path: file,
+    content: serialize(
+      unflatten(pairs),
+      existing?.endsWith("\n") ?? false,
+      indent
+    ),
+  };
 };
+
+export const saveMessages = (
+  config: Config,
+  catalog: Catalog,
+  target: { lang: string; ns: string },
+  values: Map<string, string>
+) => atomicWriteAll([messagesFile(config, catalog, target, values)]);

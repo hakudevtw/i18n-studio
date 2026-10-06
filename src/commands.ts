@@ -1,13 +1,8 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { type Catalog, loadCatalog, saveMessages } from "./catalog.js";
 import type { Config } from "./config.js";
+import { atomicWriteAll } from "./fsx.js";
 import { renderReport } from "./html.js";
 import type { Banner, Model, ModelRow } from "./model.js";
 import { overlayProposal } from "./overlay.js";
@@ -375,6 +370,7 @@ export const buildModel = (
   return {
     title: "Translation status",
     copyHeader: config.copyHeader,
+    readOnly: config.readOnly,
     banners,
     uiLocale: config.uiLocale,
     columns: locales,
@@ -385,7 +381,8 @@ export const buildModel = (
 /** Write the static report page (`studio` serves the same page live). */
 export const report = (config: Config, opts: { proposal?: string } = {}) => {
   const file = join(config.reportDir, "report.html");
-  mkdirSync(config.reportDir, { recursive: true });
-  writeFileSync(file, renderReport(buildModel(config, opts)));
+  atomicWriteAll([
+    { path: file, content: renderReport(buildModel(config, opts)) },
+  ]);
   return { file };
 };

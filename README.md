@@ -25,7 +25,7 @@ i18n-studio --help                                         # or: i18n-studio <co
 | `status [--ns x]` | Row counts per state, overall and per namespace. Hints to run `init` when there are no records. |
 | `check [--fail-on a,b] [--format text\|github\|json]` | Reports problems as **warnings** and exits 0. Only `status-file` problems (malformed status file, unreadable catalog) and the kinds in `failOn` exit 1. Kinds: `status-file`, `missing-key`, `orphan-key`, `empty`, `order`, `stale`, `edited`, `new`, `ai-draft`, `in-review`. `--format github` prints GitHub Actions annotations (`::warning file=...,title=i18n-studio::...`, `::error` for failing kinds) so a CI step can annotate PRs without failing. Whether CI fails is the consuming repo's workflow decision; the package only provides exit codes and annotations. |
 | `report [--open]` | One self-contained `report.html` in the report dir: status first, then key and one column per language; namespace sidebar, search, status/language filters, copy visible rows as TSV. Cells changed since the recorded state are highlighted. |
-| `studio [--port n] [--open]` | Serve the report at `http://127.0.0.1:<port>/` (read-only; refresh to see current data; Ctrl+C stops it). The page is a small Preact app served as static `app.js`/`app.css` plus `GET /api/model`. |
+| `studio [--port n] [--open]` | Serve the report at `http://127.0.0.1:<port>/` (read-only; refresh to see current data; Ctrl+C stops it). The page is a small Preact app served as static `app.js`/`app.css` plus `GET /api/model`. It can save through `POST /api/save` unless `readOnly` (see "Saving from the studio"). |
 | `init [--force]` | One-time baseline: every row with all languages non-empty becomes `approved`. Rows with any empty value get no record (they show `missing`). Refuses to overwrite status files without `--force`. |
 | `draft [keys...] [--ns y]` | Mark rows `ai-draft` (run after writing translations). |
 | `export [--ns x] [--all] [--format tsv\|xlsx\|csv] [--out f]` | All languages in one file, one row per key. Default: rows needing review (ai-draft, edited, new, stale, missing); `--all`: everything. Exported rows become `in-review`. |
@@ -68,6 +68,7 @@ Global flags work anywhere on the command line. A config file is optional. Prece
 | `excludeLocales` | none | `[]` | Locales ignored everywhere. Cannot contain the source locale. |
 | `namespaceOrder` | none | `[]` | These namespaces first, the rest alphabetically. |
 | `excludeNamespaces` | none | `[]` | Namespaces ignored everywhere. |
+| `readOnly` | `--read-only` | `false` | The studio server refuses `POST /api/save` (403) and the model carries `readOnly: true`. The static `report` is always read-only. |
 | `uiLocale` | `--ui-lang <auto\|en\|ko\|zh-TW\|ja>` | `auto` | Language of the studio/report page. `auto` follows the browser; `?lang=ko` in the URL overrides everything. |
 | `indent` | `--indent n\|tab\|auto` | `auto` | JSON indent when writing: `auto` keeps each file's indent (2 if it has none); a number 1-8 or `tab` forces one. Each file's trailing-newline convention is always kept. |
 | none | `--config <file>` | `./i18n-studio.config.json` if present | Config file path. |
@@ -141,8 +142,27 @@ Derived (never stored), with precedence **missing > stale > edited/new > stored 
 }
 ```
 
+## Saving from the studio
+
+The studio server has exactly one write endpoint, `POST /api/save` (the edit UI that uses it comes later; the client is `src/ui/api.ts`). The body is JSON with strict, string-only fields:
+
+```json
+{
+  "edits": [{ "id": "navigation.link.faq", "lang": "ko", "expectedOld": "<value the client saw>", "new": "<new value>" }],
+  "statuses": [{ "id": "navigation.link.faq", "state": "approved", "expectedState": "<derived state the client saw>" }]
+}
+```
+
+- **All or nothing.** Everything is validated first (ids and languages must exist in the catalog, `state` must be a storable built-in or `customStates` label, never a derived one like `missing`/`stale`/`edited`/`new`, no duplicate `(id, lang)` in a batch, nothing outside the schema). Nothing is written on any failure.
+- **Optimistic concurrency.** Disk is re-read; every `expectedOld` must equal the current value and every `expectedState` the current derived state, otherwise **409** with `conflicts: [{ id, lang?, kind: "value" | "state", current }]` and nothing is written.
+- **Order.** Edits are written first, then status changes, so approving in the same batch re-baselines the hashes. Editing the source locale is allowed; the response reports `staleRows`. An empty `new` value is allowed and returned as a warning.
+- **Response.** `{ ok, written: { files, cells }, staleRows, warnings, model }` where `model` is the fresh `/api/model` payload.
+- **Status codes.** 200 saved; 400 malformed JSON or schema (short message, input is never echoed); 403 wrong Host, Origin, `Sec-Fetch-Site`, token, or `readOnly`; 405 any method other than POST on `/api/save` (and anything but GET/HEAD elsewhere, including OPTIONS); 409 conflict; 413 body over 1 MiB; 415 content type other than `application/json` (optionally `; charset=utf-8`).
+- **Atomic writes.** Every file the tool writes (messages, status files, reports, proposals, exports) goes through one path: a temp file next to the target (`<file>.<pid>.<random>.tmp`), then a rename. A multi-file batch writes all temps first, then renames them all; if anything fails, temps are removed and files already renamed are restored from memory. Limit: renames are atomic per file but the set is not a transaction, so a crash or power loss between two renames can leave some files updated and others not (the next save then reports the mismatch as a conflict). Key order, indent and trailing-newline conventions of each file are preserved.
+
 ## Security notes
 
+- **Write protection** (`POST /api/save`): exact `Host` allowlist, an exact `Origin` (`http://127.0.0.1:<port>`, `http://localhost:<port>` or `http://[::1]:<port>`; missing or any other value is refused), `Sec-Fetch-Site` must be `same-origin` when present, a per-start random token (256 bits, compared in constant time) sent as `X-Studio-Token`, `Content-Type: application/json`, a 1 MiB body limit. No CORS headers are ever sent, so other sites cannot read or write. The token is embedded only in the shell page (a `<meta>` tag, never a URL), is also required for `GET /api/model`, and is never logged or put in error bodies. Request bodies are not logged. Use `--read-only` to disable writing.
 - The studio shell has no inline script or style (`script-src 'self'; style-src 'self'; connect-src 'self'`, `frame-ancestors 'none'`, plus `X-Frame-Options: DENY`). It serves a fixed allowlist of files (`/`, `/app.js`, `/app.css`) and `/api/model`; request paths are never mapped to file paths.
 - The static `report` stays one self-contained file (JS/CSS inlined, model embedded as JSON with `<` escaped, no network). Its inline script is only used when you open that file yourself.
 

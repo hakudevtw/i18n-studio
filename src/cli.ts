@@ -103,6 +103,7 @@ const helpText = (command?: string): string => {
     "  --fail-on <a,b>     problem kinds that make check exit 1 (config: failOn)",
     "  --indent <n|tab|auto> JSON indent when writing (config: indent; default auto = keep each file's)",
     "  --ui-lang <auto|en|ko|zh-TW|ja>  language of the studio/report page (config: uiLocale; default auto = browser)",
+    "  --read-only         studio refuses to save edits (config: readOnly)",
     "  --config <file>     JSON config (default: ./i18n-studio.config.json if present); keys dir, source, statusDir, reportDir; flags win",
     "",
     "Commands:",
@@ -217,6 +218,7 @@ export const run = async (
       "fail-on": { type: "string" },
       indent: { type: "string" },
       "ui-lang": { type: "string" },
+      "read-only": { type: "boolean" },
       out: { type: "string" },
       open: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -271,7 +273,14 @@ export const run = async (
       }
       break;
     case "studio": {
-      const { url } = await startStudio(config);
+      const { url, server } = await startStudio(config);
+      // Clean shutdown: stop accepting, drop idle connections, let the process end.
+      const stop = () => {
+        server.close();
+        server.closeAllConnections();
+      };
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
       result = { url, stop: "Ctrl+C" };
       if (values.open) {
         openFile(url);

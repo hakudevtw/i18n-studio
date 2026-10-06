@@ -474,3 +474,23 @@ describe("uiLocale", () => {
     expect(html).not.toContain('href="');
   });
 });
+
+describe("readOnly", () => {
+  const cwd = tempDir();
+  const write = (data: unknown) =>
+    writeFileSync(join(cwd, CONFIG_FILE), JSON.stringify(data));
+
+  it("defaults to false, reads the file, and --read-only turns it on", () => {
+    write({ dir: "m" });
+    expect(configFromArgs({}, cwd).readOnly).toBe(false);
+    write({ dir: "m", readOnly: true });
+    expect(configFromArgs({}, cwd).readOnly).toBe(true);
+    write({ dir: "m" });
+    expect(configFromArgs({ "read-only": true }, cwd).readOnly).toBe(true);
+  });
+
+  it("is strict about the type", () => {
+    write({ dir: "m", readOnly: "yes" });
+    expect(() => configFromArgs({}, cwd)).toThrow('"readOnly" must be');
+  });
+});

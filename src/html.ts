@@ -7,10 +7,13 @@ const escapeHtml = (s: string) =>
 const HEAD =
   '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
 
-/** Studio shell: no inline script or style; the page loads /app.js and /app.css. */
-export const renderShell = (title = "Translation status") =>
+/**
+ * Studio shell: no inline script or style; the page loads /app.js and /app.css. The
+ * per-start API token travels in a meta tag (never in a URL) and is only in this response.
+ */
+export const renderShell = (token: string, title = "Translation status") =>
   `<!doctype html>
-<html lang="en"><head>${HEAD}<title>${escapeHtml(title)}</title>
+<html lang="en"><head>${HEAD}<meta name="studio-token" content="${escapeHtml(token)}"><title>${escapeHtml(title)}</title>
 <link rel="stylesheet" href="/app.css"></head><body>
 <div id="root"></div>
 <script src="/app.js"></script></body></html>
@@ -25,7 +28,11 @@ const inlineSafe = (code: string, tag: "script" | "style") =>
  * No network access. `<` is escaped in the JSON so values can never close the script.
  */
 export const renderReport = (model: Model): string => {
-  const data = JSON.stringify(model).replaceAll("<", "\\u003c");
+  // The static report can never save.
+  const data = JSON.stringify({ ...model, readOnly: true }).replaceAll(
+    "<",
+    "\\u003c"
+  );
   return `<!doctype html>
 <html lang="en"><head>${HEAD}<title>${escapeHtml(model.title)}</title>
 <style>${inlineSafe(readAsset("app.css"), "style")}</style></head><body>

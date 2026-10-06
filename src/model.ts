@@ -45,4 +45,40 @@ export type Model = {
   /** "Copy as TSV" starts with a header row unless false. */
   copyHeader: boolean;
   uiLocale: UiLocaleSetting;
+  /** The server refuses writes (config `readOnly`); the static report is always read-only. */
+  readOnly: boolean;
+};
+
+/** `POST /api/save` request. Every field is a string; ids are `<namespace>.<dotted.key>`. */
+export type SaveEdit = {
+  id: string;
+  lang: string;
+  /** The value the client saw; the save is refused (409) when disk differs. */
+  expectedOld: string;
+  new: string;
+};
+export type SaveStatusChange = {
+  id: string;
+  /** A stored state: built in or a configured custom state. */
+  state: string;
+  /** The derived state the client saw; refused (409) when it differs now. */
+  expectedState: string;
+};
+export type SavePayload = { edits: SaveEdit[]; statuses: SaveStatusChange[] };
+
+export type SaveConflict = {
+  id: string;
+  lang?: string;
+  kind: "value" | "state";
+  /** What is on disk now. */
+  current: string;
+};
+
+export type SaveResult = {
+  ok: true;
+  written: { files: number; cells: number };
+  /** Rows of other languages that became stale because the source locale was edited. */
+  staleRows: number;
+  warnings: string[];
+  model: Model;
 };

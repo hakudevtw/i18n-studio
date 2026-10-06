@@ -28,6 +28,7 @@ describe("renderReport embedding", () => {
     banners: [],
     copyHeader: true,
     uiLocale: "ko",
+    readOnly: true,
   };
   const html = renderReport(model);
 
@@ -54,7 +55,7 @@ describe("renderReport embedding", () => {
 
 describe("renderShell", () => {
   it("has no inline script or style and loads the two assets", () => {
-    const html = renderShell();
+    const html = renderShell("test-token");
     expect(html).toContain('<script src="/app.js"></script>');
     expect(html).toContain('<link rel="stylesheet" href="/app.css">');
     expect(html).not.toContain("<style");

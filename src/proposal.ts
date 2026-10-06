@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, extname, join } from "node:path";
-import { type Catalog, loadCatalog, saveMessages } from "./catalog.js";
+import { readFileSync } from "node:fs";
+import { extname, join } from "node:path";
+import { type Catalog, loadCatalog, messagesFile } from "./catalog.js";
 import { assertLang, report } from "./commands.js";
 import type { Config } from "./config.js";
-import { getRows, localesOf, markRows, type Row } from "./status.js";
+import { atomicWriteAll } from "./fsx.js";
+import { getRows, localesOf, type Row, recordFiles } from "./status.js";
 import { parseText, readTable, type Sheet } from "./table.js";
 
 export type Change = { old: string; new: string };
@@ -424,8 +425,9 @@ export const importFile = async (
     throw new Error(errors[0]);
   }
   const out = opts.out ?? join(config.reportDir, "proposal.json");
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, `${JSON.stringify(proposal, null, 2)}\n`);
+  atomicWriteAll([
+    { path: out, content: `${JSON.stringify(proposal, null, 2)}\n` },
+  ]);
   const { file: reportFile } = report(config, { proposal: out });
   const changedCells = [...proposal.rows, ...proposal.pending].reduce(
     (n, r) => n + Object.keys(r.changes).length,
@@ -523,21 +525,21 @@ export const apply = (config: Config, file: string) => {
     }
     updated.set(plan.id, { ...row, values: { ...row.values, ...plan.values } });
   }
-  let cells = 0;
-  for (const [id, values] of writes) {
+  const messageFiles = [...writes].map(([id, values]) => {
     const [lang, ns] = id.split("\t");
-    saveMessages(config, catalog, { lang, ns }, values);
-    cells += 1;
-  }
-  for (const state of ["approved", "in-review"] as const) {
-    const ids = plans.filter((p) => p.state === state).map((p) => p.id);
-    markRows(
-      config,
-      catalog,
-      ids.map((i) => updated.get(i) as Row),
-      state
-    );
-  }
+    return messagesFile(config, catalog, { lang, ns }, values);
+  });
+  const statusFiles = recordFiles(
+    config,
+    catalog,
+    ["approved", "in-review"].flatMap((state) =>
+      plans
+        .filter((p) => p.state === state)
+        .map((p) => ({ row: updated.get(p.id) as Row, state }))
+    )
+  );
+  // One write for messages and status together (atomic per file, best effort as a set).
+  atomicWriteAll([...messageFiles, ...statusFiles]);
   return {
     approved: new Set(
       plans.filter((p) => p.state === "approved").map((p) => p.id)
@@ -545,7 +547,7 @@ export const apply = (config: Config, file: string) => {
     inReview: new Set(
       plans.filter((p) => p.state === "in-review").map((p) => p.id)
     ).size,
-    filesWritten: cells,
+    filesWritten: messageFiles.length,
     rejected,
     unresolved,
   };

@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Catalog } from "./catalog.js";
 import type { Config } from "./config.js";
+import { atomicWriteAll, type WriteFile } from "./fsx.js";
 import { BUILTIN_STORED, DERIVED_STATES } from "./states.js";
 
 /** Built-in stored states plus the configured custom ones (plain labels). */
@@ -161,16 +162,17 @@ export const getRows = (
   return rows;
 };
 
-/** Record rows (with the values given in them) as `state` with current hashes. */
-export const markRows = (
+type Record_ = { row: Pick<Row, "ns" | "key" | "values">; state: StoredState };
+
+/** Status files recording each row (with the values given in it) in its state, current hashes. */
+export const recordFiles = (
   config: Config,
   catalog: Catalog,
-  rows: Pick<Row, "ns" | "key" | "values">[],
-  state: StoredState
-) => {
-  for (const ns of new Set(rows.map((r) => r.ns))) {
+  entries: Record_[]
+): WriteFile[] =>
+  [...new Set(entries.map((e) => e.row.ns))].map((ns) => {
     const { records } = readStatus(config, ns);
-    for (const row of rows.filter((r) => r.ns === ns)) {
+    for (const { row, state } of entries.filter((e) => e.row.ns === ns)) {
       records.set(row.key, {
         state,
         hashes: Object.fromEntries(
@@ -178,17 +180,31 @@ export const markRows = (
         ),
       });
     }
-    writeStatus(config, catalog, ns, records);
-  }
-};
+    return statusFile(config, catalog, ns, records);
+  });
+
+/** Record rows as `state` with current hashes. */
+export const markRows = (
+  config: Config,
+  catalog: Catalog,
+  rows: Pick<Row, "ns" | "key" | "values">[],
+  state: StoredState
+) =>
+  atomicWriteAll(
+    recordFiles(
+      config,
+      catalog,
+      rows.map((row) => ({ row, state }))
+    )
+  );
 
 /** One line per key in source-locale order; records of removed keys are dropped. */
-export const writeStatus = (
+export const statusFile = (
   config: Config,
   catalog: Catalog,
   ns: string,
   records: Map<string, StatusRecord>
-) => {
+): WriteFile => {
   const locales = localesOf(config, catalog);
   const lines = [`# key\tstate\t${locales.join("\t")}\n`];
   for (const [key] of catalog.messages[config.sourceLocale][ns] ?? []) {
@@ -198,6 +214,12 @@ export const writeStatus = (
       lines.push(`${key}\t${r.state}\t${cols.join("\t")}\n`);
     }
   }
-  mkdirSync(config.statusDir, { recursive: true });
-  writeFileSync(statusPath(config, ns), lines.join(""));
+  return { path: statusPath(config, ns), content: lines.join("") };
 };
+
+export const writeStatus = (
+  config: Config,
+  catalog: Catalog,
+  ns: string,
+  records: Map<string, StatusRecord>
+) => atomicWriteAll([statusFile(config, catalog, ns, records)]);

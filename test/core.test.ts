@@ -146,6 +146,7 @@ describe("static report", () => {
     banners: [{ kind: "noRecords" }],
     copyHeader: true,
     uiLocale: "auto",
+    readOnly: true,
   };
 
   it("escapes data and the title, and loads nothing from the network", () => {

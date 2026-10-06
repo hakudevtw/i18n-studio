@@ -1,6 +1,7 @@
 import type { VNode } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Banner, Model, ModelRow } from "../model";
+import { fetchModel } from "./api";
 import { makeT, resolveLocale, type Translator } from "./i18n";
 import { tsvText } from "./tsv";
 
@@ -9,14 +10,7 @@ const COPY_RESET_MS = 1500;
 /** Static report: the model is embedded. Studio: fetch it fresh from the server. */
 const loadModel = async (): Promise<Model> => {
   const embedded = document.getElementById("data")?.textContent;
-  if (embedded) {
-    return JSON.parse(embedded) as Model;
-  }
-  const res = await fetch("/api/model");
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
-  }
-  return (await res.json()) as Model;
+  return embedded ? (JSON.parse(embedded) as Model) : await fetchModel();
 };
 
 const localeFor = (setting?: Model["uiLocale"]) =>

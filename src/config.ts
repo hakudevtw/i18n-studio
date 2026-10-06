@@ -38,6 +38,8 @@ export type Config = {
   indent: Indent;
   /** Language of the studio/report page; "auto" follows the browser. */
   uiLocale: UiLocaleSetting;
+  /** The studio server refuses `POST /api/save`. */
+  readOnly: boolean;
 };
 
 export const DEFAULTS = {
@@ -53,6 +55,7 @@ export const DEFAULTS = {
   excludeNamespaces: [],
   indent: "auto",
   uiLocale: "auto",
+  readOnly: false,
 } as const satisfies Partial<Record<keyof Config, unknown>>;
 
 export type ConfigFlags = {
@@ -66,6 +69,7 @@ export type ConfigFlags = {
   "fail-on"?: string;
   indent?: string;
   "ui-lang"?: string;
+  "read-only"?: boolean;
 };
 
 export const CONFIG_FILE = "i18n-studio.config.json";
@@ -89,6 +93,7 @@ const FILE_SCHEMA: Record<string, Kind> = {
   excludeNamespaces: "strings",
   indent: "indent",
   uiLocale: "uiLocale",
+  readOnly: "boolean",
 };
 
 const DIGITS = /^\d+$/;
@@ -179,6 +184,9 @@ const flagValues = (flags: ConfigFlags): Values => {
       throw new Error(`--indent must be ${EXPECTED.indent}`);
     }
   }
+  if (flags["read-only"]) {
+    out.readOnly = true;
+  }
   if (flags["ui-lang"] !== undefined) {
     out.uiLocale = flags["ui-lang"];
     if (!isUiLocale(out.uiLocale)) {
@@ -266,6 +274,7 @@ export const configFromArgs = (
     excludeNamespaces: pick("excludeNamespaces", "excludeNamespaces"),
     indent: pick("indent", "indent"),
     uiLocale: pick("uiLocale", "uiLocale"),
+    readOnly: pick("readOnly", "readOnly"),
   };
   validateStates(config);
   return config;
@@ -289,5 +298,6 @@ export const baseConfig = (
   excludeNamespaces: [],
   indent: DEFAULTS.indent,
   uiLocale: DEFAULTS.uiLocale,
+  readOnly: DEFAULTS.readOnly,
   ...overrides,
 });

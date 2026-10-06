@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import type ExcelJS from "exceljs";
+import { atomicWriteAll } from "./fsx.js";
 
 /** exceljs is an optional peer dependency, only needed for .xlsx. */
 const loadExcel = async (): Promise<typeof ExcelJS> => {
@@ -137,5 +138,7 @@ export const writeTable = async (
     sheets[0].rows,
     format === "csv" ? "," : "\t"
   );
-  writeFileSync(file, format === "csv" ? `\uFEFF${body}` : body);
+  atomicWriteAll([
+    { path: file, content: format === "csv" ? `\uFEFF${body}` : body },
+  ]);
 };
