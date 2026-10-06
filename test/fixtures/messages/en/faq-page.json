@@ -1,0 +1,15 @@
+{
+  "crj_support": {
+    "faqs": [
+      {
+        "answer": "A service:\n・Coverage one.\n・Coverage two.",
+        "question": "What is \"CRJ Support\"?"
+      },
+      {
+        "answer": "Waives cancellation fees.",
+        "question": "What is cancellation coverage?"
+      }
+    ]
+  },
+  "title": "FAQ"
+}

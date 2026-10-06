@@ -1,0 +1,15 @@
+{
+  "crj_support": {
+    "faqs": [
+      {
+        "answer": "Un servicio:\n・Cobertura uno.\n・Cobertura dos.",
+        "question": "¿Qué es \"CRJ Support\"?"
+      },
+      {
+        "answer": "Exime las tarifas de cancelación.",
+        "question": "¿Qué es la cobertura de cancelación?"
+      }
+    ]
+  },
+  "title": "Preguntas frecuentes"
+}

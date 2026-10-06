@@ -1,0 +1,309 @@
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
+import { type Catalog, loadCatalog, saveMessages } from "./catalog.js";
+import type { Config } from "./config.js";
+import { type HtmlModel, type HtmlRow, renderHtml } from "./html.js";
+import { overlayProposal } from "./overlay.js";
+import {
+  getRows,
+  hasRecords,
+  localesOf,
+  markRows,
+  NO_RECORDS_HINT,
+  type Row,
+  readStatus,
+  type State,
+  statusPath,
+} from "./status.js";
+import { type Sheet, writeTable } from "./table.js";
+
+export type Scope = { ns?: string; keys?: string[] };
+export type ExportFormat = "tsv" | "csv" | "xlsx";
+
+/** States worth sending to a reviewer. */
+const REVIEWABLE: State[] = ["ai-draft", "edited", "new", "stale", "missing"];
+
+export const assertLang = (config: Config, catalog: Catalog, lang: string) => {
+  if (!localesOf(config, catalog).includes(lang)) {
+    throw new Error(
+      `Unknown language "${lang}" (known: ${localesOf(config, catalog).join(", ")})`
+    );
+  }
+};
+
+/** Rows matching the scope. Keys are `<ns>.<dotted.path>`. */
+export const selectRows = (
+  config: Config,
+  catalog: Catalog,
+  { ns, keys }: Scope
+): Row[] => {
+  if (ns && !catalog.namespaces.includes(ns)) {
+    throw new Error(`Unknown namespace "${ns}"`);
+  }
+  const rows = getRows(config, catalog, ns ? [ns] : undefined);
+  if (!keys?.length) {
+    return rows;
+  }
+  const known = new Set(rows.map((r) => r.address));
+  const unknown = keys.filter((k) => !known.has(k));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown key(s): ${unknown.join(", ")}`);
+  }
+  const wanted = new Set(keys);
+  return rows.filter((r) => wanted.has(r.address));
+};
+
+const countStates = (rows: Row[]) => {
+  const counts: Partial<Record<State, number>> = {};
+  for (const row of rows) {
+    counts[row.state] = (counts[row.state] ?? 0) + 1;
+  }
+  return counts;
+};
+
+export const status = (config: Config, { ns }: { ns?: string }) => {
+  const catalog = loadCatalog(config);
+  const rows = selectRows(config, catalog, { ns });
+  const namespaces: Record<string, Partial<Record<State, number>>> = {};
+  for (const name of new Set(rows.map((r) => r.ns))) {
+    namespaces[name] = countStates(rows.filter((r) => r.ns === name));
+  }
+  const noRecords = !hasRecords(config, catalog);
+  return {
+    rows: rows.length,
+    counts: countStates(rows),
+    namespaces,
+    ...(noRecords && { hint: NO_RECORDS_HINT }),
+  };
+};
+
+/** Problems in one locale file, compared with the source locale's keys. */
+const checkFile = (
+  config: Config,
+  catalog: Catalog,
+  lang: string,
+  ns: string
+): string[] => {
+  const src = config.sourceLocale;
+  const where = `${lang}/${ns}.json`;
+  const flat = catalog.messages[lang][ns];
+  if (!flat) {
+    return [`${where}: file missing`];
+  }
+  const errors = flat
+    .filter(([, value]) => value === "")
+    .map(([key]) => `${where}: empty value for "${key}"`);
+  if (lang === src) {
+    return errors;
+  }
+  const sourceKeys = (catalog.messages[src][ns] ?? []).map(([k]) => k);
+  const known = new Set(sourceKeys);
+  const have = new Set(flat.map(([k]) => k));
+  for (const key of sourceKeys.filter((k) => !have.has(k))) {
+    errors.push(`${where}: missing key "${key}"`);
+  }
+  for (const [key] of flat.filter(([k]) => !known.has(k))) {
+    errors.push(`${where}: orphan key "${key}" (not in ${src})`);
+  }
+  const order = flat.map(([k]) => k).filter((k) => known.has(k));
+  const expected = sourceKeys.filter((k) => have.has(k));
+  const at = order.findIndex((k, i) => k !== expected[i]);
+  if (at !== -1) {
+    errors.push(
+      `${where}: key order differs from ${src} at "${order[at]}" (expected "${expected[at]}")`
+    );
+  }
+  return errors;
+};
+
+export const check = (config: Config) => {
+  const catalog = loadCatalog(config);
+  const errors = catalog.namespaces.flatMap((ns) => [
+    ...localesOf(config, catalog).flatMap((lang) =>
+      checkFile(config, catalog, lang, ns)
+    ),
+    ...readStatus(config, ns).errors,
+  ]);
+  const counts = countStates(getRows(config, catalog));
+  return {
+    ok: errors.length === 0,
+    errors,
+    info: {
+      stale: counts.stale ?? 0,
+      edited: counts.edited ?? 0,
+      "in-review": counts["in-review"] ?? 0,
+    },
+  };
+};
+
+export const init = (config: Config, { force }: { force: boolean }) => {
+  const catalog = loadCatalog(config);
+  const existing = catalog.namespaces.filter(
+    (ns) => readStatus(config, ns).exists
+  );
+  if (existing.length > 0 && !force) {
+    throw new Error(
+      `Status files already exist (${existing.length}, e.g. ${existing[0]}.tsv); use --force to overwrite`
+    );
+  }
+  for (const ns of existing) {
+    rmSync(statusPath(config, ns), { force: true });
+  }
+  // Rows with an empty value in any locale get no record and show as missing.
+  const rows = getRows(config, catalog).filter((r) => r.state !== "missing");
+  markRows(config, catalog, rows, "approved");
+  return { approved: rows.length };
+};
+
+export const draft = (config: Config, scope: Scope) => {
+  const catalog = loadCatalog(config);
+  const rows = selectRows(config, catalog, scope).filter(
+    (r) => r.state !== "missing"
+  );
+  markRows(config, catalog, rows, "ai-draft");
+  return { marked: rows.length };
+};
+
+export const approve = (
+  config: Config,
+  scope: Scope,
+  { allEdited }: { allEdited: boolean }
+) => {
+  if (!(allEdited || scope.keys?.length)) {
+    throw new Error("Give keys, or --all-edited (optionally with --ns)");
+  }
+  const catalog = loadCatalog(config);
+  const rows = selectRows(config, catalog, scope).filter(
+    (r) => r.state !== "missing" && (!allEdited || r.state === "edited")
+  );
+  markRows(config, catalog, rows, "approved");
+  return { approved: rows.length };
+};
+
+/** Manual single-cell edit; the row then shows as edited (not auto-approved). */
+export const set = (
+  config: Config,
+  lang: string,
+  address: string,
+  text: string
+) => {
+  const catalog = loadCatalog(config);
+  assertLang(config, catalog, lang);
+  const [row] = selectRows(config, catalog, { keys: [address] });
+  const values = new Map(catalog.messages[lang][row.ns] ?? []);
+  values.set(row.key, text);
+  saveMessages(config, catalog, { lang, ns: row.ns }, values);
+  const after = loadCatalog(config);
+  const [updated] = selectRows(config, after, { keys: [address] });
+  return {
+    address,
+    lang,
+    old: row.values[lang],
+    new: text,
+    state: updated.state,
+  };
+};
+
+/** status, [namespace,] key, languages, comment; the namespace only when rows span several. */
+const sheetRows = (rows: Row[], locales: string[], withNs: boolean) =>
+  rows.map((r) => [
+    r.state,
+    ...(withNs ? [r.ns] : []),
+    r.key,
+    ...locales.map((l) => r.values[l]),
+    "",
+  ]);
+
+export const exportRows = async (
+  config: Config,
+  opts: { ns?: string; all: boolean; format: ExportFormat; out?: string }
+) => {
+  const catalog = loadCatalog(config);
+  const locales = localesOf(config, catalog);
+  const all = selectRows(config, catalog, { ns: opts.ns });
+  const toReview = all.filter((r) => REVIEWABLE.includes(r.state));
+  const rows = opts.all ? all : toReview;
+  const out = opts.out ?? join(config.reportDir, `review.${opts.format}`);
+  mkdirSync(dirname(out), { recursive: true });
+  const head = ["status", "key", ...locales, "comment"];
+  const multiNs = new Set(rows.map((r) => r.ns)).size > 1;
+  const sheets: Sheet[] =
+    opts.format === "xlsx"
+      ? [...new Set(rows.map((r) => r.ns))].map((ns) => ({
+          name: ns.slice(0, 31),
+          rows: [
+            head,
+            ...sheetRows(
+              rows.filter((r) => r.ns === ns),
+              locales,
+              false
+            ),
+          ],
+        }))
+      : [
+          {
+            name: "review",
+            rows: [
+              multiNs
+                ? ["status", "namespace", "key", ...locales, "comment"]
+                : head,
+              ...sheetRows(rows, locales, multiNs),
+            ],
+          },
+        ];
+  if (sheets.length === 0) {
+    sheets.push({ name: "review", rows: [head] });
+  }
+  await writeTable(out, opts.format, sheets);
+  markRows(config, catalog, toReview, "in-review");
+  return { file: out, rows: rows.length, markedInReview: toReview.length };
+};
+
+/** The model behind the report page; a pending import proposal (if any) is laid over it. */
+export const buildModel = (
+  config: Config,
+  opts: { proposal?: string } = {}
+): HtmlModel => {
+  const catalog = loadCatalog(config);
+  const locales = localesOf(config, catalog);
+  let rows: HtmlRow[] = getRows(config, catalog).map((r) => ({
+    group: r.ns,
+    key: r.key,
+    status: r.state,
+    cells: locales.map((l) => ({
+      text: r.values[l],
+      changed: r.changedLocales.includes(l),
+    })),
+  }));
+  const banners = hasRecords(config, catalog) ? [] : [NO_RECORDS_HINT];
+  const proposalFile = opts.proposal ?? join(config.reportDir, "proposal.json");
+  if (existsSync(proposalFile)) {
+    const overlay = overlayProposal(
+      rows,
+      JSON.parse(readFileSync(proposalFile, "utf8")),
+      locales
+    );
+    rows = overlay.rows;
+    banners.push(overlay.summary);
+  }
+  return {
+    title: "Translation status",
+    banner: banners.filter(Boolean).join(" ") || undefined,
+    columns: locales,
+    rows,
+  };
+};
+
+/** Write the static report page (`studio` serves the same page live). */
+export const report = (config: Config, opts: { proposal?: string } = {}) => {
+  const file = join(config.reportDir, "report.html");
+  mkdirSync(config.reportDir, { recursive: true });
+  writeFileSync(file, renderHtml(buildModel(config, opts)));
+  return { file };
+};
