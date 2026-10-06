@@ -20,6 +20,8 @@ export type HtmlModel = {
   /** Headers for `cells` (locales). */
   columns: string[];
   rows: HtmlRow[];
+  /** Studio "Copy as TSV" starts with a header row unless this is false. Set by the server. */
+  copyHeader?: boolean;
 };
 
 const CSS = `
@@ -47,8 +49,6 @@ input:focus-visible,select:focus-visible,button.act:focus-visible{outline:2px so
 input[type=search]{flex:1 1 180px;max-width:320px}
 button.act{cursor:pointer;background:var(--panel);font-weight:500}
 button.act:hover{background:var(--hover)}
-.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer}
-input[type=checkbox]{height:auto;width:15px;padding:0;accent-color:var(--accent)}
 .scroll{flex:1;overflow:auto;min-height:0}
 table{border-collapse:separate;border-spacing:0;table-layout:fixed;width:100%}
 th,td{padding:10px 14px;vertical-align:top;text-align:left;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
@@ -64,7 +64,8 @@ tr:hover td.status,tr:hover td.key{background:var(--hover)}
 tr:hover td.changed{background:var(--hl)}
 td.changed{background:var(--hl)}
 del{display:block;color:var(--muted)}
-tr.group td{position:sticky;left:0;background:var(--panel);font-weight:600;font-size:12px;color:var(--accent);padding:8px 14px}
+tr.group td{background:var(--panel);font-weight:600;font-size:12px;color:var(--accent);padding:8px 14px}
+tr.group td.label{position:sticky;left:0;z-index:1}
 tr.group:hover td{background:var(--panel)}
 .badge{--c:#64748b;display:inline-block;border-radius:999px;padding:0 8px;font-size:11px;line-height:18px;font-weight:600;white-space:nowrap;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
 .b-missing,.b-unmatched{--c:light-dark(#e11d48,#fb7185)}
@@ -135,7 +136,9 @@ function renderTable() {
     if (!group && r.group !== current) {
       current = r.group;
       const g = table.insertRow(); g.className = "group";
-      const td = g.insertCell(); td.colSpan = cols.length + 2; td.textContent = current;
+      // Two cells: a label as wide as status+key (so it can stick at left:0) and a filler.
+      const label = g.insertCell(); label.colSpan = 2; label.className = "label"; label.textContent = current;
+      g.insertCell().colSpan = Math.max(1, cols.length);
     }
     const tr = table.insertRow();
     const s = tr.insertCell(); s.className = "status";
@@ -166,12 +169,10 @@ async function copyText(text) {
 function tsvText() {
   const multiNs = new Set(visible.map((r) => r.group)).size > 1;
   const lines = [];
-  if ($("header").checked) lines.push(["status", ...(multiNs ? ["namespace"] : []), "key", ...cols.map((i) => model.columns[i])].map(quote).join("\t"));
+  if (model.copyHeader !== false) lines.push(["status", ...(multiNs ? ["namespace"] : []), "key", ...cols.map((i) => model.columns[i])].map(quote).join("\t"));
   for (const r of visible) lines.push([r.status, ...(multiNs ? [r.group] : []), r.key, ...cols.map((i) => (r.cells[i] ? r.cells[i].text : ""))].map(quote).join("\t"));
   return lines.join("\n");
 }
-try { const saved = localStorage.getItem("i18n-copy-header"); if (saved !== null) $("header").checked = saved === "1"; } catch (e) { /* storage unavailable */ }
-$("header").onchange = () => { try { localStorage.setItem("i18n-copy-header", $("header").checked ? "1" : "0"); } catch (e) { /* storage unavailable */ } };
 $("copy").onclick = async () => {
   const text = tsvText();
   const ok = await copyText(text);
@@ -200,8 +201,7 @@ export const renderHtml = (model: HtmlModel): string => {
 <div class="filters"><input id="q" type="search" placeholder="Search key or text">
 <select id="status" aria-label="Status"><option value="">All statuses</option></select>
 <select id="lang" aria-label="Language"><option value="">All languages</option></select>
-<button class="act" id="copy" type="button">Copy as TSV</button>
-<label class="chk"><input type="checkbox" id="header" checked> Include header</label></div>
+<button class="act" id="copy" type="button">Copy as TSV</button></div>
 <div class="scroll" id="scroll"><table id="table"></table><div class="empty" id="empty" hidden>No rows match the current filters.</div></div>
 </main>
 <dialog id="manual"><p>This viewer blocks clipboard access. Select all, then copy (Cmd/Ctrl+C) and paste into Google Sheets.</p><textarea id="manualText" readonly></textarea><div class="row"><button class="act" id="manualClose" type="button">Close</button></div></dialog>

@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Config } from "../src/config.js";
+import { baseConfig, type Config } from "../src/config.js";
 
 /** Checked-in catalog (en, es, ko): multi-line values, array keys, `_0` keys, empty values. */
 export const FIXTURE_DIR = join(import.meta.dirname, "fixtures/messages");
@@ -16,19 +16,24 @@ export const FIXTURE_MISSING = 3;
 
 export const tempDir = () => mkdtempSync(join(tmpdir(), "i18n-studio-"));
 
-export const tempConfig = (): Config => {
+export const tempConfig = (overrides: Partial<Config> = {}): Config => {
   const root = tempDir();
-  return {
-    i18nDir: join(root, "messages"),
-    sourceLocale: "en",
-    statusDir: join(root, "messages-status"),
-    reportDir: join(root, "report"),
-  };
+  return baseConfig(
+    {
+      i18nDir: join(root, "messages"),
+      statusDir: join(root, "messages-status"),
+      reportDir: join(root, "report"),
+    },
+    overrides
+  );
 };
 
 /** Temp copy of (some of) the fixture catalog. */
-export const copyFixture = (langs = ["en", "ko", "es"]) => {
-  const config = tempConfig();
+export const copyFixture = (
+  langs = ["en", "ko", "es"],
+  overrides: Partial<Config> = {}
+) => {
+  const config = tempConfig(overrides);
   for (const lang of langs) {
     cpSync(join(FIXTURE_DIR, lang), join(config.i18nDir, lang), {
       recursive: true,
@@ -38,8 +43,8 @@ export const copyFixture = (langs = ["en", "ko", "es"]) => {
 };
 
 /** Tiny synthetic catalog: namespaces `a` and `b`, locales `ko` and `es`. */
-export const syntheticConfig = () => {
-  const config = tempConfig();
+export const syntheticConfig = (overrides: Partial<Config> = {}) => {
+  const config = tempConfig(overrides);
   const write = (lang: string, ns: string, data: unknown) => {
     mkdirSync(join(config.i18nDir, lang), { recursive: true });
     writeFileSync(

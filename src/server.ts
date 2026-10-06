@@ -59,8 +59,9 @@ export const startStudio = async (
     });
 
   // An explicit port is used as given; the default walks up if it is taken.
-  const tries = opts.port === undefined ? PORT_TRIES : 1;
-  const first = opts.port ?? DEFAULT_PORT;
+  const requested = opts.port ?? config.port;
+  const tries = requested === undefined ? PORT_TRIES : 1;
+  const first = requested ?? DEFAULT_PORT;
   for (let i = 0; i < tries; i += 1) {
     try {
       await listen(first + i);

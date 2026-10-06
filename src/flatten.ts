@@ -37,6 +37,21 @@ export const unflatten = (pairs: Flat): Record<string, unknown> => {
   return root;
 };
 
-/** Same formatting as the generated files: 2-space indent; trailing newline only if asked. */
-export const serialize = (obj: unknown, trailingNewline = false): string =>
-  `${JSON.stringify(obj, null, 2)}${trailingNewline ? "\n" : ""}`;
+const INDENTED = /\n(\t|( +))\S/;
+
+/** Indent used by an existing JSON text: a tab, a number of spaces, or 2 when it has none. */
+export const detectIndent = (text: string): number | "tab" => {
+  const match = INDENTED.exec(text);
+  if (!match) {
+    return 2;
+  }
+  return match[1] === "\t" ? "tab" : match[1].length;
+};
+
+/** JSON text; trailing newline only if asked. */
+export const serialize = (
+  obj: unknown,
+  trailingNewline = false,
+  indent: number | "tab" = 2
+): string =>
+  `${JSON.stringify(obj, null, indent === "tab" ? "\t" : indent)}${trailingNewline ? "\n" : ""}`;

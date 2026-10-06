@@ -3,22 +3,21 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Catalog } from "./catalog.js";
 import type { Config } from "./config.js";
+import { BUILTIN_STORED, DERIVED_STATES } from "./states.js";
 
-export const STORED_STATES = [
-  "ai-draft",
-  "in-review",
-  "approved",
-  "archived",
-] as const;
-export type StoredState = (typeof STORED_STATES)[number];
+/** Built-in stored states plus the configured custom ones (plain labels). */
+export type StoredState = string;
 /** Stored states plus the ones derived from the data (never written to disk). */
-export type State = StoredState | "missing" | "stale" | "edited" | "new";
-export const ALL_STATES: State[] = [
-  "missing",
-  "stale",
-  "edited",
-  "new",
-  ...STORED_STATES,
+export type State = string;
+
+export const storedStates = (config: Config): string[] => [
+  ...BUILTIN_STORED,
+  ...config.customStates,
+];
+/** Every state, derived first; used to order status output. */
+export const allStates = (config: Config): string[] => [
+  ...DERIVED_STATES,
+  ...storedStates(config),
 ];
 
 /** What was recorded for one key (a row across all locales). */
@@ -37,6 +36,8 @@ export type Row = {
   /** Value per locale (empty string when absent). */
   values: Record<string, string>;
   state: State;
+  /** Matches `ignoreKeys`: may stay empty, is never derived as missing. */
+  ignored: boolean;
   /** Locales whose value differs from the recorded hash (empty without a record). */
   changedLocales: string[];
 };
@@ -44,6 +45,16 @@ export type Row = {
 export const NO_RECORDS_HINT = "No status records yet — run `i18n-studio init`";
 
 const HASH = /^([0-9a-f]{10}|-)$/;
+
+const escapeRegExp = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+
+/** Matcher for glob patterns where `*` is any run of characters (dots included). */
+export const globMatcher = (patterns: string[]) => {
+  const regexes = patterns.map(
+    (p) => new RegExp(`^${p.split("*").map(escapeRegExp).join(".*")}$`)
+  );
+  return (address: string) => regexes.some((re) => re.test(address));
+};
 
 export const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex").slice(0, 10);
@@ -78,7 +89,7 @@ export const readStatus = (config: Config, ns: string) => {
     const [key, state, ...cols] = line.split("\t");
     const ok =
       cols.length === locales.length &&
-      (STORED_STATES as readonly string[]).includes(state) &&
+      storedStates(config).includes(state) &&
       cols.every((c) => HASH.test(c));
     if (!ok || records.has(key)) {
       errors.push(`${ns}.tsv:${i + 2}: malformed or duplicate line`);
@@ -98,13 +109,14 @@ export const hasRecords = (config: Config, catalog: Catalog) =>
 export const deriveState = (
   sourceLocale: string,
   values: Record<string, string>,
-  record: StatusRecord | undefined
+  record: StatusRecord | undefined,
+  ignored = false
 ): { state: State; changedLocales: string[] } => {
   const changedLocales = record
     ? Object.keys(values).filter((l) => hash(values[l]) !== record.hashes[l])
     : [];
   const withState = (state: State) => ({ state, changedLocales });
-  if (Object.values(values).some((v) => v === "")) {
+  if (!ignored && Object.values(values).some((v) => v === "")) {
     return withState("missing");
   }
   if (!record) {
@@ -125,6 +137,7 @@ export const getRows = (
   namespaces: string[] = catalog.namespaces
 ): Row[] => {
   const locales = localesOf(config, catalog);
+  const ignore = globMatcher(config.ignoreKeys);
   const rows: Row[] = [];
   for (const ns of namespaces) {
     const { records } = readStatus(config, ns);
@@ -133,12 +146,15 @@ export const getRows = (
       const values = Object.fromEntries(
         locales.map((l, i) => [l, maps[i].get(key) ?? ""])
       );
+      const address = `${ns}.${key}`;
+      const ignored = ignore(address);
       rows.push({
         ns,
         key,
-        address: `${ns}.${key}`,
+        address,
         values,
-        ...deriveState(config.sourceLocale, values, records.get(key)),
+        ignored,
+        ...deriveState(config.sourceLocale, values, records.get(key), ignored),
       });
     }
   }

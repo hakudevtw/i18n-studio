@@ -1,7 +1,13 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Config } from "./config.js";
-import { type Flat, flatten, serialize, unflatten } from "./flatten.js";
+import {
+  detectIndent,
+  type Flat,
+  flatten,
+  serialize,
+  unflatten,
+} from "./flatten.js";
 
 export type Catalog = {
   /** Non-source locales, auto-detected: sub-folders of i18nDir that contain *.json. */
@@ -27,6 +33,12 @@ const listLocales = (dir: string, exclude: string[]) =>
     .map((e) => e.name)
     .sort();
 
+/** Names with `first` (those that exist) in the given order, then the rest as they were. */
+const ordered = (names: string[], first: string[]) => [
+  ...first.filter((n) => names.includes(n)),
+  ...names.filter((n) => !first.includes(n)),
+];
+
 const messagePath = (config: Config, lang: string, ns: string) =>
   join(config.i18nDir, lang, `${ns}.json`);
 
@@ -37,13 +49,25 @@ export const loadCatalog = (config: Config): Catalog => {
       `Source locale folder not found: ${sourceDir} (check --dir, or pass --source <locale>)`
     );
   }
-  const all = listLocales(config.i18nDir, [config.statusDir, config.reportDir]);
-  const namespaces = readdirSync(sourceDir)
-    .filter((f) => f.endsWith(".json"))
-    .map((f) => f.slice(0, -".json".length))
-    .sort();
+  if (config.excludeLocales.includes(config.sourceLocale)) {
+    throw new Error("excludeLocales cannot contain the source locale");
+  }
+  const locales = ordered(
+    listLocales(config.i18nDir, [config.statusDir, config.reportDir]).filter(
+      (l) => l !== config.sourceLocale && !config.excludeLocales.includes(l)
+    ),
+    config.localeOrder
+  );
+  const namespaces = ordered(
+    readdirSync(sourceDir)
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.slice(0, -".json".length))
+      .filter((ns) => !config.excludeNamespaces.includes(ns))
+      .sort(),
+    config.namespaceOrder
+  );
   const messages: Catalog["messages"] = {};
-  for (const lang of all) {
+  for (const lang of [config.sourceLocale, ...locales]) {
     messages[lang] = {};
     for (const ns of namespaces) {
       const file = messagePath(config, lang, ns);
@@ -52,11 +76,7 @@ export const loadCatalog = (config: Config): Catalog => {
         : undefined;
     }
   }
-  return {
-    locales: all.filter((l) => l !== config.sourceLocale),
-    namespaces,
-    messages,
-  };
+  return { locales, namespaces, messages };
 };
 
 /** Write a locale file with keys in source-locale order (unknown keys keep their order, last). */
@@ -80,8 +100,11 @@ export const saveMessages = (
     }
   }
   const file = messagePath(config, lang, ns);
-  const trailingNewline = existsSync(file)
-    ? readFileSync(file, "utf8").endsWith("\n")
-    : false;
-  writeFileSync(file, serialize(unflatten(pairs), trailingNewline));
+  const existing = existsSync(file) ? readFileSync(file, "utf8") : undefined;
+  const indent =
+    config.indent === "auto" ? detectIndent(existing ?? "") : config.indent;
+  writeFileSync(
+    file,
+    serialize(unflatten(pairs), existing?.endsWith("\n") ?? false, indent)
+  );
 };

@@ -202,8 +202,11 @@ describe("status layer (temp data)", () => {
   });
 
   it("check passes on keys/order and flags only empty values (fixture copy)", () => {
-    const { errors } = check(copyFixture());
-    expect(errors.filter((e) => !e.includes("empty value"))).toEqual([]);
+    const { problems, ok } = check(copyFixture());
+    expect(ok).toBe(true); // warnings only by default
+    expect(
+      problems.filter((p) => p.kind !== "empty" && p.kind !== "new")
+    ).toEqual([]);
   });
 
   it("check flags malformed status files", () => {
@@ -211,7 +214,14 @@ describe("status layer (temp data)", () => {
     init(cfg, { force: false });
     const file = join(cfg.statusDir, "a.tsv");
     appendFileSync(file, "broken\tapproved\n");
-    expect(check(cfg).errors.join("\n")).toContain("a.tsv");
+    const checked = check(cfg);
+    expect(checked.ok).toBe(false);
+    expect(
+      checked.problems.find((p) => p.kind === "status-file")
+    ).toMatchObject({ level: "error" });
+    expect(checked.problems.map((p) => p.message).join("\n")).toContain(
+      "a.tsv"
+    );
   });
 
   it("draft, set and approve move a row through the states", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { run } from "../src/cli.js";
+import { FIXTURE_DIR } from "./helpers.js";
 
 const cli = async (...argv: string[]) => {
   let out = "";
@@ -44,5 +45,14 @@ describe("help", () => {
     expect(code).toBe(1);
     expect(out).toContain("unknown command: nope");
     expect(out).toContain("Commands:");
+  });
+});
+
+describe("flag parsing through the real argv path", () => {
+  it("accepts --no-copy-header and --copy-header", async () => {
+    for (const flag of ["--no-copy-header", "--copy-header"]) {
+      const { code } = await cli("--dir", FIXTURE_DIR, flag, "status");
+      expect(code).toBe(0);
+    }
   });
 });

@@ -1,6 +1,17 @@
 # i18n-studio
 
-Review-status layer and export/import loop for translation JSON (`<dir>/<lang>/<namespace>.json`). The JSON files stay the single source of truth; reviewers work in Google Sheets/xlsx and their answers come back through a reviewable proposal. Status is tracked **per row** (one key across all languages), because rows are confirmed as a whole. Values are plain text (newlines allowed); no ICU/rich-text parsing. Zero runtime dependencies.
+Review-status layer and export/import loop for translation JSON (`<dir>/<lang>/<namespace>.json`). The JSON files stay the single source of truth; reviewers work in Google Sheets/xlsx and their answers come back through a reviewable proposal. Status is tracked **per row** (one key across all languages), because rows are confirmed as a whole. Values are plain text (newlines allowed); no ICU/rich-text parsing. Zero runtime dependencies. Requires Node >= 22.
+
+## Quick start
+
+```bash
+# not published yet: see "Develop with yarn link" below
+yarn add -D i18n-studio
+# package.json scripts: "i18n": "i18n-studio --dir src/i18n/messages"
+yarn i18n init            # one-time baseline: existing complete rows become approved
+yarn i18n studio --open   # browse every row, language and status in the browser
+yarn i18n check           # warnings for missing/empty keys, order, stale rows
+```
 
 ## Usage
 
@@ -12,7 +23,7 @@ i18n-studio --help                                         # or: i18n-studio <co
 | Command | What it does |
 | --- | --- |
 | `status [--ns x]` | Row counts per state, overall and per namespace. Hints to run `init` when there are no records. |
-| `check` | Exit 1 on: missing key, empty value, key order differing from the source locale, orphan key, malformed status file. stale / edited / in-review are only reported. |
+| `check [--fail-on a,b] [--format text\|github\|json]` | Reports problems as **warnings** and exits 0. Only `status-file` problems (malformed status file, unreadable catalog) and the kinds in `failOn` exit 1. Kinds: `status-file`, `missing-key`, `orphan-key`, `empty`, `order`, `stale`, `edited`, `new`, `ai-draft`, `in-review`. `--format github` prints GitHub Actions annotations (`::warning file=...,title=i18n-studio::...`, `::error` for failing kinds) so a CI step can annotate PRs without failing. Whether CI fails is the consuming repo's workflow decision; the package only provides exit codes and annotations. |
 | `report [--open]` | One self-contained `report.html` in the report dir: status first, then key and one column per language; namespace sidebar, search, status/language filters, copy visible rows as TSV. Cells changed since the recorded state are highlighted. |
 | `studio [--port n] [--open]` | Serve the report at `http://127.0.0.1:<port>/` (read-only; refresh to see current data; Ctrl+C stops it). |
 | `init [--force]` | One-time baseline: every row with all languages non-empty becomes `approved`. Rows with any empty value get no record (they show `missing`). Refuses to overwrite status files without `--force`. |
@@ -21,34 +32,61 @@ i18n-studio --help                                         # or: i18n-studio <co
 | `import <file\|-> [--lang x] [--out p.json]` | Parse the sheet the reviewer returned (tsv/csv/xlsx file, or `-` to read a pasted sheet from stdin) into `proposal.json` and refresh `report.html` with the proposal laid over it (changed cells: old value struck through, new below). Never writes messages. |
 | `apply [proposal.json]` | Write accepted rows to the messages JSON and update status. |
 | `approve [keys...] [--ns y] [--all-edited]` | Re-baseline hashes and mark rows `approved`. |
+| `mark <state> [keys...] [--ns x]` | Set a stored state (`ai-draft`, `in-review`, `approved`, `archived`, or a `customStates` label) on rows. Needs keys or `--ns`. |
 | `set <lang> <ns.key> "<text>"` | Manual single-cell edit; the row then shows as `edited` (not auto-approved). The key must exist. |
 
 Keys are `<namespace>.<dotted.path>`; array indices are numeric segments (e.g. `faq-page.crj_support.faqs.0.question`).
 
 ## Configuration
 
-Global flags work anywhere on the command line. A config file is optional. Precedence: **flags > config file > defaults**.
+Global flags work anywhere on the command line. A config file is optional. Precedence: **flags > config file > defaults**. Unknown config keys or wrong types are an error naming the key.
 
-| Flag | Config key | Default |
-| --- | --- | --- |
-| `--dir <dir>` | `dir` | none; required (from flag or file). The folder with `<lang>/<namespace>.json`. |
-| `--source <locale>` | `source` | `en` |
-| `--status-dir <dir>` | `statusDir` | `<dir>-status` (a visible sibling, e.g. `src/i18n/messages-status`) |
-| `--report-dir <dir>` | `reportDir` | `<cwd>/node_modules/.cache/i18n-studio` |
-| `--config <file>` | n/a | `./i18n-studio.config.json` if present |
-
-`i18n-studio.config.json` (in the cwd, or the file given with `--config`, which must exist):
+`i18n-studio.config.json` (in the cwd, or the file given with `--config`, which must exist). It is **JSON only, on purpose**: reading it never executes code.
 
 ```json
-{ "dir": "src/i18n/messages", "source": "en" }
+{
+  "dir": "src/i18n/messages",
+  "ignoreKeys": ["*.meta.*"],
+  "failOn": ["empty"],
+  "customStates": ["legal-ok"]
+}
 ```
 
-The config file is **JSON only, on purpose**: reading it never executes code. Unknown keys or wrong types are an error naming the key. Relative paths in the file resolve against the file's own folder; relative paths from flags resolve against the cwd. Locales are auto-detected (sub-folders of `--dir` that contain `*.json`; the status and report folders are never treated as locales), and namespaces come from the source locale's `*.json` files.
+| Config key | Flag | Default | Meaning |
+| --- | --- | --- | --- |
+| `dir` | `--dir <dir>` | none (required) | Folder with `<lang>/<namespace>.json`. |
+| `source` | `--source <locale>` | `en` | Source locale: defines keys, key order, namespaces. Always the first column. |
+| `statusDir` | `--status-dir <dir>` | `<dir>-status` | Review-status files (commit them). |
+| `reportDir` | `--report-dir <dir>` | `<cwd>/node_modules/.cache/i18n-studio` | Generated reports/exports/proposals. |
+| `copyHeader` | `--no-copy-header` | `true` | Studio "Copy as TSV" starts with a header row. `export` always writes one (import needs it). |
+| `port` | `--port <n>` | unset | Studio port. Explicit (flag or config) = used as given, error if taken; unset = start at 4321 and walk up. |
+| `failOn` | `--fail-on a,b` | `["status-file"]` | Problem kinds that make `check` exit 1 (`status-file` always does). |
+| `ignoreKeys` | none | `[]` | Globs over `<namespace>.<dotted.path>` (`*` = any characters, dots included) for keys that may stay empty/untranslated. |
+| `exportStates` | none | `ai-draft, edited, new, stale, missing` | States `export` includes by default. |
+| `customStates` | none | `[]` | Extra stored states: kebab-case labels that must not collide with built-in ones. |
+| `localeOrder` | none | `[]` | These locales first (in this order), the rest alphabetically; the source locale is always first. |
+| `excludeLocales` | none | `[]` | Locales ignored everywhere. Cannot contain the source locale. |
+| `namespaceOrder` | none | `[]` | These namespaces first, the rest alphabetically. |
+| `excludeNamespaces` | none | `[]` | Namespaces ignored everywhere. |
+| `indent` | `--indent n\|tab\|auto` | `auto` | JSON indent when writing: `auto` keeps each file's indent (2 if it has none); a number 1-8 or `tab` forces one. Each file's trailing-newline convention is always kept. |
+| none | `--config <file>` | `./i18n-studio.config.json` if present | Config file path. |
+
+Relative paths in the file resolve against the file's own folder; relative paths from flags resolve against the cwd. Locales are auto-detected (sub-folders of `--dir` that contain `*.json`; the status and report folders are never treated as locales), and namespaces come from the source locale's `*.json` files.
+
+Semantics worth knowing:
+
+- **`ignoreKeys`**: a matching row is never derived as `missing` (empty or absent values are fine), is not reported by `check` as `empty`/`missing-key`, is left out of the default `export` (still in `export --all`), and is baselined `approved` by `init` (also when its values are empty).
+- **Custom states** are plain labels: they round-trip through the status files and the report (neutral gray badge), but have no transitions and no effect on `init`; `export` marks rows `in-review` as usual. Change a cell and the row still derives `edited`.
+- **Order and exclusion** affect report columns/sidebar, export columns/sheets, `status`, `check` and `import`.
+
+### Not supported yet
+
+Alternative directory layouts (for example flat `<lang>.json` files) are not supported; the layout is always `<dir>/<lang>/<namespace>.json`.
 
 ## Layout and conventions
 
-- Column order everywhere: status, [namespace], key, languages (source first, then the others alphabetically), comment.
-- Canonical key order is the source locale file's order. Files are written as 2-space JSON, keeping each file's trailing-newline convention.
+- Column order everywhere: status, [namespace], key, languages (source first, then `localeOrder`/alphabetical), comment.
+- Canonical key order is the source locale file's order. Files are written with each file's own indent (see `indent`; 2 spaces if it has none) and trailing-newline convention.
 - Status files (commit them): `<status dir>/<namespace>.tsv`. First line is a header comment, then one line per key in source order, with one value hash per language (source included):
 
   ```

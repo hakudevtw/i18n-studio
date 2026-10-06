@@ -5,13 +5,15 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { type Catalog, loadCatalog, saveMessages } from "./catalog.js";
 import type { Config } from "./config.js";
 import { type HtmlModel, type HtmlRow, renderHtml } from "./html.js";
 import { overlayProposal } from "./overlay.js";
+import type { ProblemKind } from "./states.js";
 import {
   getRows,
+  globMatcher,
   hasRecords,
   localesOf,
   markRows,
@@ -20,14 +22,12 @@ import {
   readStatus,
   type State,
   statusPath,
+  storedStates,
 } from "./status.js";
 import { type Sheet, writeTable } from "./table.js";
 
 export type Scope = { ns?: string; keys?: string[] };
 export type ExportFormat = "tsv" | "csv" | "xlsx";
-
-/** States worth sending to a reviewer. */
-const REVIEWABLE: State[] = ["ai-draft", "edited", "new", "stale", "missing"];
 
 export const assertLang = (config: Config, catalog: Catalog, lang: string) => {
   if (!localesOf(config, catalog).includes(lang)) {
@@ -83,62 +83,116 @@ export const status = (config: Config, { ns }: { ns?: string }) => {
   };
 };
 
+export type Problem = {
+  kind: ProblemKind;
+  /** `error` when the kind is in `failOn` (status-file always is), else `warning`. */
+  level: "error" | "warning";
+  message: string;
+  /** Path relative to the cwd, when the problem belongs to a file. */
+  file?: string;
+};
+
+type Found = Omit<Problem, "level">;
+
 /** Problems in one locale file, compared with the source locale's keys. */
 const checkFile = (
   config: Config,
   catalog: Catalog,
   lang: string,
   ns: string
-): string[] => {
+): Found[] => {
   const src = config.sourceLocale;
+  const file = relative(
+    process.cwd(),
+    join(config.i18nDir, lang, `${ns}.json`)
+  );
   const where = `${lang}/${ns}.json`;
+  const ignored = globMatcher(config.ignoreKeys);
+  const found = (kind: ProblemKind, message: string): Found => ({
+    kind,
+    message: `${where}: ${message}`,
+    file,
+  });
   const flat = catalog.messages[lang][ns];
   if (!flat) {
-    return [`${where}: file missing`];
+    return [found("missing-key", "file missing")];
   }
-  const errors = flat
-    .filter(([, value]) => value === "")
-    .map(([key]) => `${where}: empty value for "${key}"`);
+  const problems = flat
+    .filter(([key, value]) => value === "" && !ignored(`${ns}.${key}`))
+    .map(([key]) => found("empty", `empty value for "${key}"`));
   if (lang === src) {
-    return errors;
+    return problems;
   }
   const sourceKeys = (catalog.messages[src][ns] ?? []).map(([k]) => k);
   const known = new Set(sourceKeys);
   const have = new Set(flat.map(([k]) => k));
-  for (const key of sourceKeys.filter((k) => !have.has(k))) {
-    errors.push(`${where}: missing key "${key}"`);
+  for (const key of sourceKeys.filter(
+    (k) => !(have.has(k) || ignored(`${ns}.${k}`))
+  )) {
+    problems.push(found("missing-key", `missing key "${key}"`));
   }
   for (const [key] of flat.filter(([k]) => !known.has(k))) {
-    errors.push(`${where}: orphan key "${key}" (not in ${src})`);
+    problems.push(found("orphan-key", `orphan key "${key}" (not in ${src})`));
   }
   const order = flat.map(([k]) => k).filter((k) => known.has(k));
   const expected = sourceKeys.filter((k) => have.has(k));
   const at = order.findIndex((k, i) => k !== expected[i]);
   if (at !== -1) {
-    errors.push(
-      `${where}: key order differs from ${src} at "${order[at]}" (expected "${expected[at]}")`
+    problems.push(
+      found(
+        "order",
+        `key order differs from ${src} at "${order[at]}" (expected "${expected[at]}")`
+      )
     );
   }
-  return errors;
+  return problems;
 };
 
-export const check = (config: Config) => {
-  const catalog = loadCatalog(config);
-  const errors = catalog.namespaces.flatMap((ns) => [
+const STATE_KINDS = ["stale", "edited", "new", "ai-draft", "in-review"];
+
+const collectProblems = (config: Config): Found[] => {
+  let catalog: Catalog;
+  try {
+    catalog = loadCatalog(config);
+  } catch (e) {
+    return [{ kind: "status-file", message: (e as Error).message }];
+  }
+  const problems = catalog.namespaces.flatMap((ns) => [
     ...localesOf(config, catalog).flatMap((lang) =>
       checkFile(config, catalog, lang, ns)
     ),
-    ...readStatus(config, ns).errors,
+    ...readStatus(config, ns).errors.map(
+      (message): Found => ({ kind: "status-file", message })
+    ),
   ]);
-  const counts = countStates(getRows(config, catalog));
+  for (const row of getRows(config, catalog)) {
+    if (STATE_KINDS.includes(row.state)) {
+      problems.push({
+        kind: row.state as ProblemKind,
+        message: `${row.address} is ${row.state}`,
+        file: relative(
+          process.cwd(),
+          join(config.i18nDir, config.sourceLocale, `${row.ns}.json`)
+        ),
+      });
+    }
+  }
+  return problems;
+};
+
+/** Everything is a warning unless its kind is in `failOn` (status-file always fails). */
+export const check = (config: Config) => {
+  const problems: Problem[] = collectProblems(config).map((p) => ({
+    ...p,
+    level: config.failOn.includes(p.kind) ? "error" : "warning",
+  }));
+  const count = (level: Problem["level"]) =>
+    problems.filter((p) => p.level === level).length;
   return {
-    ok: errors.length === 0,
-    errors,
-    info: {
-      stale: counts.stale ?? 0,
-      edited: counts.edited ?? 0,
-      "in-review": counts["in-review"] ?? 0,
-    },
+    ok: count("error") === 0,
+    errors: count("error"),
+    warnings: count("warning"),
+    problems,
   };
 };
 
@@ -159,6 +213,23 @@ export const init = (config: Config, { force }: { force: boolean }) => {
   const rows = getRows(config, catalog).filter((r) => r.state !== "missing");
   markRows(config, catalog, rows, "approved");
   return { approved: rows.length };
+};
+
+/** Set any stored state (built in or custom) on the selected rows. */
+export const mark = (config: Config, state: string, scope: Scope) => {
+  const allowed = storedStates(config);
+  if (!allowed.includes(state)) {
+    throw new Error(
+      `Unknown state "${state}" (allowed: ${allowed.join(", ")})`
+    );
+  }
+  if (!(scope.ns || scope.keys?.length)) {
+    throw new Error("Give keys or --ns");
+  }
+  const catalog = loadCatalog(config);
+  const rows = selectRows(config, catalog, scope);
+  markRows(config, catalog, rows, state);
+  return { marked: rows.length, state };
 };
 
 export const draft = (config: Config, scope: Scope) => {
@@ -227,7 +298,10 @@ export const exportRows = async (
   const catalog = loadCatalog(config);
   const locales = localesOf(config, catalog);
   const all = selectRows(config, catalog, { ns: opts.ns });
-  const toReview = all.filter((r) => REVIEWABLE.includes(r.state));
+  // Ignored keys are left out of the default set (they stay in --all).
+  const toReview = all.filter(
+    (r) => !r.ignored && config.exportStates.includes(r.state)
+  );
   const rows = opts.all ? all : toReview;
   const out = opts.out ?? join(config.reportDir, `review.${opts.format}`);
   mkdirSync(dirname(out), { recursive: true });
@@ -294,6 +368,7 @@ export const buildModel = (
   }
   return {
     title: "Translation status",
+    copyHeader: config.copyHeader,
     banner: banners.filter(Boolean).join(" ") || undefined,
     columns: locales,
     rows,

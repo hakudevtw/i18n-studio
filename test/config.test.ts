@@ -18,7 +18,7 @@ describe("configFromArgs: flags only", () => {
 
   it("applies defaults relative to the cwd", () => {
     const cwd = tempDir();
-    expect(configFromArgs({ dir: "src/messages" }, cwd)).toEqual({
+    expect(configFromArgs({ dir: "src/messages" }, cwd)).toMatchObject({
       i18nDir: join(cwd, "src/messages"),
       sourceLocale: "en",
       statusDir: `${join(cwd, "src/messages")}-status`,
@@ -33,7 +33,7 @@ describe("configFromArgs: flags only", () => {
         { dir: "m", source: "ja", "status-dir": "st", "report-dir": "rp" },
         cwd
       )
-    ).toEqual({
+    ).toMatchObject({
       i18nDir: join(cwd, "m"),
       sourceLocale: "ja",
       statusDir: join(cwd, "st"),
