@@ -1,7 +1,7 @@
 ---
 name: i18n-studio
 description: Work safely with translation/locale JSON files (<dir>/<lang>/<namespace>.json) that are tracked by i18n-studio. Use when editing or adding translations, adding or removing translation keys, checking translation status, exporting rows for review, or importing a reviewer's returned spreadsheet.
-i18n-studio-version: 0.1.0
+i18n-studio-version: 0.1.1
 ---
 
 # i18n-studio
