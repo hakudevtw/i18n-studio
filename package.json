@@ -1,6 +1,6 @@
 {
   "name": "i18n-studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Review-status layer and export/import loop for translation JSON.",
   "license": "MIT",
   "type": "module",
@@ -38,7 +38,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "lint": "biome check .",
     "changeset": "changeset",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && node scripts/sync-skill-version.mjs",
     "release": "changeset publish",
     "prepack": "pnpm build"
   },
