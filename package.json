@@ -67,7 +67,7 @@
     "exceljs": "4.4.0",
     "jsdom": "29.1.1",
     "preact": "11.0.0",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "ultracite": "6.3.2",
     "vitest": "4.1.11"
   }
