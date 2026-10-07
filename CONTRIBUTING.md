@@ -5,15 +5,35 @@ Thanks for helping. This is a small tool with strict constraints; please read "S
 ## Setup
 
 ```bash
-yarn install --frozen-lockfile   # Node >= 22, Yarn Classic
-yarn build                       # tsc (node code) + esbuild (browser UI) -> dist/
-yarn test                        # builds the UI first, then Vitest
-yarn test:coverage               # same, with a v8 coverage report (text + lcov in coverage/)
-yarn typecheck                   # tsc over src and test
-yarn lint                        # Biome (ultracite preset); `npx biome check --write .` fixes most things
+pnpm install --frozen-lockfile   # Node >= 22, pnpm version from package.json
+pnpm build                       # tsc (node code) + esbuild (browser UI) -> dist/
+pnpm test                        # builds the UI first, then Vitest
+pnpm test:coverage               # same, with a v8 coverage report (text + lcov in coverage/)
+pnpm typecheck                   # tsc over src and test
+pnpm lint                        # Biome (ultracite preset); `pnpm exec biome check --write .` fixes most things
 ```
 
 CI runs install (frozen lockfile), typecheck, lint, build and test on Node 22.
+
+## Releases
+
+User-visible pull requests should include a Changeset:
+
+```bash
+pnpm changeset
+```
+
+Choose the semantic version bump and describe the change for package users.
+After the pull request merges, the release workflow maintains a version pull
+request containing the version and `CHANGELOG.md` updates. Merging that pull
+request publishes to npm.
+
+The repository must have an `NPM_TOKEN` Actions secret for the first publish.
+After `i18n-studio` exists on npm, configure npm Trusted Publishing for
+`.github/workflows/release.yml` on the `main` branch. The workflow requests an
+OIDC token and publishes with provenance. In GitHub's Actions settings, enable
+"Allow GitHub Actions to create and approve pull requests" so the automated
+version pull request can be opened.
 
 ## Project map
 
@@ -25,7 +45,7 @@ CI runs install (frozen lockfile), typecheck, lint, build and test on Node 22.
 
 - Most tests run in plain Node against temp copies of `test/fixtures`. They never touch real project files.
 - Component tests in `test/dom/` opt in with `// @vitest-environment jsdom` and render the real components with `preact/test-utils`. We chose **jsdom** over happy-dom: happy-dom has a history of critical advisories (script execution and VM escape, for example GHSA-96g7-g7g9-jxw8 and GHSA-37j7-fg3j-429f), while jsdom has none outstanding. jsdom is pinned exactly and `vitest.config.ts` sets `runScripts: "outside-only"` so page scripts never run (a test checks this). jsdom lacks `<dialog>.showModal` and `scrollIntoView`; `test/dom/dom.tsx` stubs them.
-- Prefer testing pure modules directly. Use a component test for behaviour that needs the DOM (focus, events, dialogs). Please also check UI changes in a real browser against a scratch copy of some messages: `yarn build && node dist/bin.js --dir <copy> studio`.
+- Prefer testing pure modules directly. Use a component test for behaviour that needs the DOM (focus, events, dialogs). Please also check UI changes in a real browser against a scratch copy of some messages: `pnpm build && node dist/bin.js --dir <copy> studio`.
 - Do not run write tests against a real messages folder.
 
 ## Adding a UI language

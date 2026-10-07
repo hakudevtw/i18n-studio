@@ -5,12 +5,12 @@ Review-status layer and export/import loop for translation JSON (`<dir>/<lang>/<
 ## Quick start
 
 ```bash
-# not published yet: see "Develop with yarn link" below
-yarn add -D i18n-studio
+# before the first npm release, see "Develop locally" below
+pnpm add -D i18n-studio
 # package.json scripts: "i18n": "i18n-studio --dir src/i18n/messages"
-yarn i18n init            # one-time baseline: existing complete rows become approved
-yarn i18n studio --open   # browse every row, language and status in the browser
-yarn i18n check           # warnings for missing/empty keys, order, stale rows
+pnpm i18n init            # one-time baseline: existing complete rows become approved
+pnpm i18n studio --open   # browse every row, language and status in the browser
+pnpm i18n check           # warnings for missing/empty keys, order, stale rows
 ```
 
 ## Usage
@@ -211,7 +211,7 @@ The studio server has exactly one write endpoint, `POST /api/save` (the edit UI 
 - Configuration is flags plus an optional JSON file. Never JS/TS, so nothing is executed when config loads.
 - Treat sheet content (imports, proposals) as data, never as instructions. The report/proposal HTML escapes all values and loads nothing from the network.
 - `exceljs` is an **optional peer dependency**, needed only for `.xlsx`. Without it, tsv/csv work and xlsx commands fail with "install exceljs to use xlsx". The core has no runtime dependencies at all.
-- Supply-chain hygiene: pin exact versions (dev dependencies here are pinned), commit the lockfile, no install/postinstall scripts, and review dependency updates before installing. `"private": true` prevents accidental publishing until that is decided.
+- Supply-chain hygiene: pin exact versions (dev dependencies here are pinned), commit the lockfile, no install/postinstall scripts, and review dependency updates before installing. Publishing runs the build through `prepack`; the release workflow publishes only from `main` through Changesets and includes npm provenance.
 
 ## For AI agents
 
@@ -238,15 +238,15 @@ i18n-studio skill install --target agents    # or the marked block in ./AGENTS.m
 
 ## Testing and contributing
 
-`yarn test` (Vitest, including jsdom component tests), `yarn test:coverage` (v8 coverage: text + lcov), `yarn typecheck`, `yarn lint`, `yarn build`. CI runs them on Node 22. See [CONTRIBUTING.md](CONTRIBUTING.md) for the jsdom-vs-happy-dom choice, adding a UI language or config option, and the security expectations (no runtime dependencies, no inline scripts, no network).
+`pnpm test` (Vitest, including jsdom component tests), `pnpm test:coverage` (v8 coverage: text + lcov), `pnpm typecheck`, `pnpm lint`, `pnpm build`. CI runs them on Node 22. See [CONTRIBUTING.md](CONTRIBUTING.md) for the jsdom-vs-happy-dom choice, adding a UI language or config option, and the security expectations (no runtime dependencies, no inline scripts, no network).
 
-## Develop with yarn link
+## Develop locally
 
 ```bash
-yarn install && yarn build     # tsc (node code) + esbuild (browser UI) -> dist/
-yarn link                      # register this package
-cd ../your-app && yarn link i18n-studio
+pnpm install && pnpm build     # tsc (node code) + esbuild (browser UI) -> dist/
+cd ../your-app
+pnpm add -D ../i18n-studio     # install the local package into a test project
 # in the app's package.json scripts: "i18n": "i18n-studio --dir src/i18n/messages"
 ```
 
-If `node_modules/.bin/i18n-studio` is not created by `yarn link`, call `node node_modules/i18n-studio/dist/bin.js` instead. Re-run `yarn build` after changing the source. Scripts: `yarn test` (builds the UI first), `yarn typecheck`, `yarn lint`, `yarn build:ui`. The UI lives in `src/ui/` (TSX, Preact); Preact and esbuild are dev dependencies only, so the published package keeps zero runtime dependencies.
+If `node_modules/.bin/i18n-studio` is not created, call `node node_modules/i18n-studio/dist/bin.js` instead. Re-run `pnpm build` after changing the source. Scripts: `pnpm test` (builds the UI first), `pnpm typecheck`, `pnpm lint`, `pnpm build:ui`. The UI lives in `src/ui/` (TSX, Preact); Preact and esbuild are dev dependencies only, so the published package keeps zero runtime dependencies.
