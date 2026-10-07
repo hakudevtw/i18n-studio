@@ -15,7 +15,7 @@ import {
 import { ApiError, fetchModel, saveBatch } from "./api";
 import { ConfirmDialog, ManualCopyDialog, ShortcutsDialog } from "./dialogs";
 import { type Restored, relativeTime } from "./draft";
-import { type Editing, Grid, type GridActions } from "./grid";
+import { Changed, type Editing, Grid, type GridActions } from "./grid";
 import type { Translator } from "./i18n";
 import { MenuLayer, type MenuTarget } from "./menu";
 import { clampSel, type Move, move, type Sel } from "./nav";
@@ -34,10 +34,55 @@ import {
   toPayload,
   truncate,
 } from "./staged";
+import {
+  applyTheme,
+  readTheme,
+  saveTheme,
+  systemTheme,
+  type Theme,
+  watchSystemTheme,
+} from "./theme";
 import { tsvText } from "./tsv";
 import { usePersistDraft, useRestoredDraft } from "./use-draft";
+import { diffWords } from "./word-diff";
 
 const TYPING = /^(INPUT|TEXTAREA|SELECT)$/;
+
+/** A one-line list entry can show an inline word diff, never the stacked rewrite. */
+const diffable = (from: string, to: string, lang?: string) =>
+  diffWords(from, to, lang) !== null;
+
+const SunIcon = () => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height="16"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-width="2"
+    viewBox="0 0 24 24"
+    width="16"
+  >
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height="16"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="2"
+    viewBox="0 0 24 24"
+    width="16"
+  >
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </svg>
+);
 const COPY_RESET_MS = 1500;
 const TOAST_MS = 4000;
 const DERIVED = ["missing", "stale", "edited", "new"];
@@ -154,6 +199,22 @@ export const Report = ({
   const writable = !model.readOnly;
   const source = model.columns[0];
   const [q, setQ] = useState("");
+  const [theme, setTheme] = useState<Theme>(() => readTheme() ?? systemTheme());
+  useEffect(
+    () =>
+      watchSystemTheme((next) => {
+        if (!readTheme()) {
+          setTheme(next);
+        }
+      }),
+    []
+  );
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    saveTheme(next);
+    applyTheme(next);
+    setTheme(next);
+  };
   const [status, setStatus] = useState("");
   const [lang, setLang] = useState("");
   const [showArchived, setShowArchived] = useState(model.showArchived);
@@ -198,7 +259,9 @@ export const Report = ({
   menuRef.current = menu;
   const menuFor = menu?.id ?? null;
   const [details, setDetails] = useState(false);
-  const jump = useRef<{ id: string; lang?: string } | null>(null);
+  // State, not a ref: a jump within the current view changes nothing else, and
+  // still has to re-render so the effect below can select and reveal the cell.
+  const [jump, setJump] = useState<{ id: string; lang?: string } | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [bulkState, setBulkState] = useState("");
   const [confirm, setConfirm] = useState<Confirm | null>(null);
@@ -462,19 +525,23 @@ export const Report = ({
 
   // Jump from the pending list: reveal the row (clear filters), then select the cell.
   useEffect(() => {
-    const target = jump.current;
-    if (!target) {
+    if (!jump) {
       return;
     }
-    const at = visible.findIndex((r) => rowId(r) === target.id);
+    const at = visible.findIndex((r) => rowId(r) === jump.id);
     if (at === -1) {
       return;
     }
-    jump.current = null;
-    const modelCol = target.lang ? model.columns.indexOf(target.lang) : -1;
-    const col = target.lang ? cols.indexOf(modelCol) + 1 : 0;
-    setSel({ row: at, col: Math.max(0, col) });
+    setJump(null);
+    const modelCol = jump.lang ? model.columns.indexOf(jump.lang) : -1;
+    const col = Math.max(0, jump.lang ? cols.indexOf(modelCol) + 1 : 0);
+    setSel({ row: at, col });
     focusGrid();
+    // Centred, so the open pending list does not cover it; also when the
+    // selection did not change and the scroll effect would not run.
+    document
+      .getElementById(`cell-${at}-${col}`)
+      ?.scrollIntoView({ block: "center", inline: "nearest" });
   });
 
   useEffect(() => {
@@ -580,7 +647,7 @@ export const Report = ({
     setLang("");
     setShowArchived(true);
     pick(row.group);
-    jump.current = { id, lang: language };
+    setJump({ id, lang: language });
   };
   const revert = (entry: StagedEntry) =>
     entry.kind === "cell"
@@ -597,6 +664,14 @@ export const Report = ({
           state: entry.from,
           expectedState: entry.from,
         });
+
+  // Groups holding unsaved changes, marked in the sidebar.
+  const dirtyGroups = new Set(
+    listStaged(staged).flatMap((entry) => {
+      const row = model.rows.find((r) => rowId(r) === entry.id);
+      return row ? [row.group] : [];
+    })
+  );
 
   const banner = model.banners.map((b) => bannerText(b, tr)).join(" ");
   const problemText =
@@ -616,6 +691,7 @@ export const Report = ({
         <ul id="side">
           {["", ...groups].map((g) => {
             const n = base.filter((r) => !g || r.group === g).length;
+            const dirty = g ? dirtyGroups.has(g) : dirtyGroups.size > 0;
             return (
               <li key={g}>
                 <button
@@ -624,7 +700,17 @@ export const Report = ({
                   onClick={() => pick(g)}
                   type="button"
                 >
-                  <span>{g ? groupLabel(g) : t("sidebar.all")}</span>
+                  <span>
+                    {g ? groupLabel(g) : t("sidebar.all")}
+                    {dirty && (
+                      <span
+                        aria-label={t("sidebar.pending")}
+                        class="dot"
+                        role="img"
+                        title={t("sidebar.pending")}
+                      />
+                    )}
+                  </span>
                   <span class="n">{n}</span>
                 </button>
               </li>
@@ -659,6 +745,17 @@ export const Report = ({
                 ))}
               </select>
             )}
+            <button
+              aria-label={t(
+                theme === "dark" ? "theme.toLight" : "theme.toDark"
+              )}
+              class="act icon"
+              onClick={toggleTheme}
+              title={t(theme === "dark" ? "theme.toLight" : "theme.toDark")}
+              type="button"
+            >
+              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            </button>
             {writable && (
               <button
                 aria-label={t("help.button")}
@@ -814,6 +911,7 @@ export const Report = ({
               menuFor={menuFor}
               model={model}
               on={actions}
+              query={q.trim()}
               rows={visible}
               sel={sel}
               selected={selected}
@@ -839,14 +937,27 @@ export const Report = ({
                         onClick={() => jumpTo(entry.id, entry.lang)}
                         type="button"
                       >
-                        <span class="entry-id">{entry.id}</span>
-                        <span class="entry-what">
-                          {entry.lang ?? t("col.status")}
+                        <span class="entry-head">
+                          <span class="entry-what">
+                            {entry.lang ?? t("col.status")}
+                          </span>
+                          <span class="entry-id">{entry.id}</span>
                         </span>
                         <span class="entry-change">
-                          <del>{entryText(entry.kind, entry.from)}</del>
-                          {" → "}
-                          {entryText(entry.kind, entry.to)}
+                          {entry.kind === "cell" &&
+                          diffable(entry.from, entry.to, entry.lang) ? (
+                            <Changed
+                              after={entry.to}
+                              before={entry.from}
+                              lang={entry.lang}
+                            />
+                          ) : (
+                            <>
+                              <del>{entryText(entry.kind, entry.from)}</del>
+                              {" → "}
+                              {entryText(entry.kind, entry.to)}
+                            </>
+                          )}
                         </span>
                       </button>
                       <button

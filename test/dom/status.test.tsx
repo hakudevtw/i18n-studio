@@ -245,18 +245,35 @@ describe("top bar layout", () => {
     ]);
     expect(q("#count")?.parentElement).toBe(title);
     const actions = [...(q(".bar-actions")?.children ?? [])];
-    expect(actions.map((c) => c.tagName)).toEqual(["SELECT", "BUTTON"]);
-    expect(actions[1].getAttribute("aria-label")).toBe(
+    expect(actions.map((c) => c.tagName)).toEqual([
+      "SELECT",
+      "BUTTON",
+      "BUTTON",
+    ]);
+    expect(actions[1].getAttribute("aria-label")).toBe("Switch to dark theme");
+    expect(actions[2].getAttribute("aria-label")).toBe(
       "Keyboard shortcuts (?)"
     );
-    expect(actions[1].classList.contains("icon")).toBe(true);
-    expect(actions[1].textContent).toBe("?");
+    expect(actions[2].classList.contains("icon")).toBe(true);
+    expect(actions[2].textContent).toBe("?");
   });
 
   it("omits the switcher when it is turned off", async () => {
     await show(model({ languageSwitcher: false }));
     expect(
       [...(q(".bar-actions")?.children ?? [])].map((c) => c.tagName)
-    ).toEqual(["BUTTON"]);
+    ).toEqual(["BUTTON", "BUTTON"]);
+  });
+
+  it("follows the system theme until a theme is picked, then remembers it", async () => {
+    localStorage.removeItem("i18n-studio.theme");
+    await show();
+    await click(q('[aria-label="Switch to dark theme"]'));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem("i18n-studio.theme")).toBe("dark");
+    await click(q('[aria-label="Switch to light theme"]'));
+    expect(document.documentElement.dataset.theme).toBe("light");
+    localStorage.removeItem("i18n-studio.theme");
+    delete document.documentElement.dataset.theme;
   });
 });

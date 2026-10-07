@@ -5,12 +5,13 @@
  * biome-ignore-all lint/a11y/useKeyWithClickEvents: keyboard handling is on the grid, see report.tsx
  */
 import type { Ref, VNode } from "preact";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import type { Model, ModelCell, ModelRow } from "../model";
 import type { Translator } from "./i18n";
 import type { MenuTarget } from "./menu";
 import type { Move, Sel } from "./nav";
 import { cellKey, rowId, type Staged } from "./staged";
+import { diffWords } from "./word-diff";
 
 export type Editing = {
   id: string;
@@ -52,10 +53,81 @@ export type GridProps = {
   groupLabel: (g: string) => string;
   statusLabel: (s: string) => string;
   on: GridActions;
+  /** The search text, highlighted wherever it matches. */
+  query: string;
+};
+
+const SPECIAL = /[.*+?^${}()|[\]\\]/g;
+
+/** `text` with every case-insensitive match of `query` wrapped in `<mark>`. */
+const Highlight = ({ text, query }: { text: string; query: string }) => {
+  if (!query) {
+    return <>{text}</>;
+  }
+  const parts = text.split(
+    new RegExp(`(${query.replace(SPECIAL, "\\$&")})`, "gi")
+  );
+  return (
+    <>
+      {parts.map((part, i) =>
+        // Odd indexes are the captured matches.
+        i % 2 === 1 ? <mark key={i}>{part}</mark> : part
+      )}
+    </>
+  );
+};
+
+/**
+ * An old and a new value. A small edit shows inline, only the changed words
+ * marked; a rewrite shows the whole old value struck through above the new one.
+ */
+export const Changed = ({
+  before,
+  after,
+  lang,
+  query = "",
+}: {
+  before: string;
+  after: string;
+  lang?: string;
+  query?: string;
+}) => {
+  const parts = diffWords(before, after, lang);
+  if (!parts) {
+    return (
+      <>
+        <del>
+          <Highlight query={query} text={before} />
+        </del>
+        <Highlight query={query} text={after} />
+      </>
+    );
+  }
+  return (
+    <>
+      {parts.map((p, i) => {
+        const text = <Highlight query={query} text={p.text} />;
+        if (p.kind === "del") {
+          return (
+            <del class="word" key={i}>
+              {text}
+            </del>
+          );
+        }
+        if (p.kind === "ins") {
+          return (
+            <ins class="word" key={i}>
+              {text}
+            </ins>
+          );
+        }
+        return <span key={i}>{text}</span>;
+      })}
+    </>
+  );
 };
 
 const cellId = (row: number, col: number) => `cell-${row}-${col}`;
-const MAX_EDITOR_ROWS = 10;
 
 /** Textarea editor: Enter commits, Shift+Enter newline, Esc cancels, Tab commits and moves. */
 const Editor = ({
@@ -74,6 +146,15 @@ const Editor = ({
     const el = ref.current;
     el?.focus();
     el?.select(); // whole value selected: type to replace, an arrow key to edit in place
+  }, []);
+  // Opens at the height of its text, so the cell keeps its height. The height
+  // stays fixed while editing; longer input scrolls inside the editor.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
   }, []);
   const onKeyDown = (e: KeyboardEvent) => {
     // Never act on keys that confirm an IME composition (Korean, Japanese, Chinese).
@@ -103,7 +184,7 @@ const Editor = ({
       onInput={(e) => on.input((e.currentTarget as HTMLTextAreaElement).value)}
       onKeyDown={onKeyDown}
       ref={ref}
-      rows={Math.min(MAX_EDITOR_ROWS, editing.value.split("\n").length + 1)}
+      rows={1}
       title={tr.t("help.commit")}
       value={editing.value}
     />
@@ -186,8 +267,10 @@ const ValueCell = ({
       aria-selected={g.writable ? isSel : undefined}
       class={classes.join(" ")}
       id={cellId(rowIdx, col)}
-      onClick={() => on.select({ row: rowIdx, col })}
-      onDblClick={() => on.edit(rowIdx, col)}
+      // While editing, clicks belong to the editor: selecting the cell would
+      // focus the grid, blur the textarea and commit.
+      onClick={() => isEditing || on.select({ row: rowIdx, col })}
+      onDblClick={() => isEditing || on.edit(rowIdx, col)}
       role="gridcell"
       title={title}
     >
@@ -200,8 +283,16 @@ const ValueCell = ({
         />
       ) : (
         <>
-          {struck !== undefined && <del>{struck}</del>}
-          {sc ? sc.current : c?.text}
+          {struck === undefined ? (
+            <Highlight query={g.query} text={c?.text ?? ""} />
+          ) : (
+            <Changed
+              after={(sc ? sc.current : c?.text) ?? ""}
+              before={struck}
+              lang={lang}
+              query={g.query}
+            />
+          )}
           {sc && <span aria-hidden="true" class="dot" />}
           {sc?.conflict !== undefined && (
             <Conflict
@@ -314,7 +405,7 @@ const BodyRow = ({
       )}
       <StatusCell g={g} row={row} rowIdx={rowIdx} />
       <td class="key" role="gridcell">
-        {row.key}
+        <Highlight query={g.query} text={row.key} />
       </td>
       {g.cols.map((modelCol, p) => (
         <ValueCell
