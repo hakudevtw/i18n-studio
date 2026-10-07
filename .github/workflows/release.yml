@@ -35,5 +35,3 @@ jobs:
           publish-script: pnpm release
           version-script: pnpm version-packages
           create-github-releases: true
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
