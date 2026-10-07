@@ -28,12 +28,11 @@ After the pull request merges, the release workflow maintains a version pull
 request containing the version and `CHANGELOG.md` updates. Merging that pull
 request publishes to npm.
 
-The repository must have an `NPM_TOKEN` Actions secret for the first publish.
-After `i18n-studio` exists on npm, configure npm Trusted Publishing for
+Publishing authenticates through npm Trusted Publishing for
 `.github/workflows/release.yml` on the `main` branch. The workflow requests an
-OIDC token and publishes with provenance. In GitHub's Actions settings, enable
-"Allow GitHub Actions to create and approve pull requests" so the automated
-version pull request can be opened.
+OIDC token and publishes with provenance; no npm token is stored in GitHub. In
+GitHub's Actions settings, enable "Allow GitHub Actions to create and approve
+pull requests" so the automated version pull request can be opened.
 
 ## Project map
 
