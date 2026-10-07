@@ -564,6 +564,27 @@ button.act.primary {
   border-color: var(--accent);
   color: light-dark(#fff, #0b0d12);
 }
+button.act.danger {
+  background: light-dark(#dc2626, #ef4444);
+  border-color: light-dark(#dc2626, #ef4444);
+  color: #fff;
+}
+button.act.danger:hover {
+  background: light-dark(#b91c1c, #dc2626);
+}
+.confirm-items {
+  max-height: 40vh;
+  overflow: auto;
+  margin: 0 0 12px;
+  padding: 8px 12px 8px 28px;
+  border: 1px solid var(--raised-line);
+  border-radius: 8px;
+  background: var(--bg);
+  font:
+    12px / 1.6 ui-monospace,
+    Menlo,
+    monospace;
+}
 button.act:disabled {
   opacity: 0.45;
   cursor: default;

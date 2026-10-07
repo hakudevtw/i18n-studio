@@ -32,9 +32,9 @@ On the next load a banner says "Restored N unsaved changes (saved 5 minutes ago)
 
 ## Archived rows
 
-`mark archived <keys>` (or the status menu) retires a key without touching the JSON, so application code and types keep working. Archived rows are never `missing`, `stale` or `edited`; `check` ignores their empty or missing values; the default `export` leaves them out (still in `--all`); `init` skips them (and `init --force` keeps their records); `status` counts them separately; the page hides them behind "Show archived" (read-only except for changing their status).
+`mark archived <keys>` (or the status menu) retires a key without touching the JSON, so application code and types keep working. Archived rows are never `missing`, `stale` or `edited`; `check` ignores their empty or missing values; the default `export` leaves them out (still in `--all`); `init` skips them (and `init --force` keeps their records); `status` counts them separately; the page hides them behind "Show archived" (read-only except for changing their status). With "Show archived" on, selecting only archived rows offers **Delete N permanently**: a confirmation lists every key, then the rows are removed exactly as `prune --yes` would (only while nothing else is pending, since a delete is written at once rather than staged).
 
-`prune [keys...] [--ns x] [--yes]` is the only command that deletes keys: it removes archived keys from **every** language's JSON (source included) and from the status files, through the single atomic write path, preserving key order, indent and trailing newline. Without `--yes` it only prints what it would delete. It refuses to leave a gap in an array (prune the whole array or only trailing items). **The tool cannot know whether application code still references a key; check usage first.**
+`prune [keys...] [--ns x] [--yes]` is the command that deletes keys (the studio's permanent delete uses the same write): it removes archived keys from **every** language's JSON (source included) and from the status files, through the single atomic write path, preserving key order, indent and trailing newline. Without `--yes` it only prints what it would delete. It refuses to leave a gap in an array (prune the whole array or only trailing items). **The tool cannot know whether application code still references a key; check usage first.**
 
 ## Save API
 
@@ -47,9 +47,11 @@ The studio server has exactly one write endpoint, `POST /api/save`. The body is 
 }
 ```
 
+A delete is a batch of its own: `{ "prune": [{ "id": "navigation.link.old" }] }`. It cannot be combined with `edits` or `statuses` (400); every row must still be `archived` on disk, otherwise **409** with `kind: "state"` conflicts. It writes what `prune --yes` writes, and refuses (400) to leave a gap in an array.
+
 - **All or nothing.** Everything is validated first (ids and languages must exist in the catalog, `state` must be a storable built-in or `customStates` label, never a derived one like `missing`/`stale`/`edited`/`new`, no duplicate `(id, lang)` in a batch, nothing outside the schema). Nothing is written on any failure.
 - **Optimistic concurrency.** Disk is re-read; every `expectedOld` must equal the current value and every `expectedState` the current derived state, otherwise **409** with `conflicts: [{ id, lang?, kind: "value" | "state", current }]` and nothing is written.
 - **Order.** Edits are written first, then status changes, so approving in the same batch re-baselines the hashes. Editing the source locale is allowed; the response reports `staleRows`. An empty `new` value is allowed and returned as a warning.
-- **Response.** `{ ok, written: { files, cells }, staleRows, warnings, model }` where `model` is the fresh `/api/model` payload.
+- **Response.** `{ ok, written: { files, cells, deleted? }, staleRows, warnings, model }` (`deleted` only for a prune batch) where `model` is the fresh `/api/model` payload.
 - **Status codes.** 200 saved; 400 malformed JSON or schema (short message, input is never echoed); 403 wrong Host, Origin, `Sec-Fetch-Site`, token, or `readOnly`; 405 any method other than POST on `/api/save` (and anything but GET/HEAD elsewhere, including OPTIONS); 409 conflict; 413 body over 1 MiB; 415 content type other than `application/json` (optionally `; charset=utf-8`).
 - **Atomic writes.** Every file the tool writes (messages, status files, reports, proposals, exports) goes through one path: a temp file next to the target (`<file>.<pid>.<random>.tmp`), then a rename. A multi-file batch writes all temps first, then renames them all; if anything fails, temps are removed and files already renamed are restored from memory. Limit: renames are atomic per file but the set is not a transaction, so a crash or power loss between two renames can leave some files updated and others not (the next save then reports the mismatch as a conflict). Key order, indent and trailing-newline conventions of each file are preserved.

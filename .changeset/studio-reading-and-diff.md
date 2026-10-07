@@ -10,4 +10,5 @@ Studio: easier to read and review.
 - The cell editor opens at the value's own height and scrolls past it; clicking inside it no longer closes it.
 - The pending list wraps each change onto its own lines, and jumping to an entry centres the cell clear of the list.
 - Groups with unsaved edits get a dot in the sidebar.
+- Archived rows can be deleted permanently from the studio: select them with "Show archived" on, confirm the listed keys, and they are removed as `prune --yes` would. `POST /api/save` accepts a `prune` batch for this.
 - Dialogs and menus stand out from the page, and select arrows no longer touch the edge.

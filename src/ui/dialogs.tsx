@@ -27,22 +27,39 @@ export const ConfirmDialog = ({
   tr,
   text,
   yes,
+  items,
+  danger,
   onYes,
   onCancel,
 }: {
   tr: Translator;
   text: string;
   yes: string;
+  /** Listed under the question, e.g. the keys a delete removes. */
+  items?: string[];
+  /** The confirming button is styled as destructive. */
+  danger?: boolean;
   onYes: () => void;
   onCancel: () => void;
 }) => (
   <Modal label={text} onClose={onCancel}>
     <p class="confirm">{text}</p>
+    {items && items.length > 0 && (
+      <ul class="confirm-items">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    )}
     <div class="row">
       <button class="act" onClick={onCancel} type="button">
         {tr.t("confirm.cancel")}
       </button>
-      <button class="act primary" onClick={onYes} type="button">
+      <button
+        class={danger ? "act danger" : "act primary"}
+        onClick={onYes}
+        type="button"
+      >
         {yes}
       </button>
     </div>

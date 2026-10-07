@@ -348,3 +348,45 @@ describe("one atomic write path", () => {
     expect(tmpFiles(cfg)).toEqual([]);
   });
 });
+
+describe("saveBatch: prune", () => {
+  it("deletes an archived row from every language and its status record", () => {
+    const cfg = baselined();
+    mark(cfg, "archived", { keys: [FAQ.id] });
+    const result = saveBatch(cfg, { prune: [{ id: FAQ.id }] });
+    expect(result.written.deleted).toBe(1);
+    expect(stateOf(cfg, FAQ.id)).toBeUndefined();
+    for (const lang of ["en", "ko", "es"]) {
+      expect(readText(cfg, lang, "navigation")).not.toContain('"faq"');
+    }
+    expect(
+      result.model.rows.some((r) => `${r.group}.${r.key}` === FAQ.id)
+    ).toBe(false);
+  });
+
+  it("answers 409 for a row that is not archived on disk and deletes nothing", () => {
+    const cfg = baselined();
+    const before = snapshot(cfg);
+    const e = failure(() => saveBatch(cfg, { prune: [{ id: FAQ.id }] }));
+    expect(e.status).toBe(409);
+    expect(e.conflicts).toEqual([
+      { id: FAQ.id, kind: "state", current: "approved" },
+    ]);
+    expect(snapshot(cfg)).toEqual(before);
+  });
+
+  it("refuses prune mixed with edits, unknown ids and duplicates with 400", () => {
+    const cfg = baselined();
+    mark(cfg, "archived", { keys: [FAQ.id] });
+    const before = snapshot(cfg);
+    for (const body of [
+      { edits: [HOME], prune: [{ id: FAQ.id }] },
+      { prune: [{ id: "navigation.nope" }] },
+      { prune: [{ id: FAQ.id }, { id: FAQ.id }] },
+      { prune: [{ id: FAQ.id, extra: "x" }] },
+    ]) {
+      expect(failure(() => saveBatch(cfg, body)).status).toBe(400);
+    }
+    expect(snapshot(cfg)).toEqual(before);
+  });
+});

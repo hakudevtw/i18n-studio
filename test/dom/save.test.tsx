@@ -345,3 +345,50 @@ describe("discard and the unload guard", () => {
     remove.mockRestore();
   });
 });
+
+describe("permanent delete", () => {
+  const selectRow = async (rowKey: string) =>
+    click(
+      qa<HTMLInputElement>("tbody tr")
+        .find((r) => r.querySelector("td.key")?.textContent === rowKey)
+        ?.querySelector('input[type="checkbox"]')
+    );
+  const deleteButton = () => q("button.act.danger");
+
+  it("is offered only when every selected row is archived", async () => {
+    await show(model({ showArchived: true }));
+    await selectRow("ok");
+    expect(deleteButton()).toBeNull();
+    await selectRow("ok");
+    await selectRow("old");
+    expect(deleteButton()?.textContent).toBe("Delete 1 permanently");
+  });
+
+  it("is blocked while edits are pending", async () => {
+    await show(model({ showArchived: true }));
+    await stage("home", "ko", "집");
+    await selectRow("old");
+    expect(deleteButton()?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("confirms with the keys listed, then sends only the prune", async () => {
+    api.saveBatch.mockResolvedValue(
+      result({ written: { files: 3, cells: 0, deleted: 1 } })
+    );
+    await show(model({ showArchived: true }));
+    await selectRow("old");
+    await click(deleteButton());
+    expect(qa(".confirm-items li").map((li) => li.textContent)).toEqual([
+      "common.old",
+    ]);
+    await click(q("dialog button.act.danger"));
+    await settle();
+    expect(api.saveBatch).toHaveBeenCalledWith({
+      edits: [],
+      statuses: [],
+      prune: [{ id: "common.old" }],
+    });
+    expect(onModel).toHaveBeenCalled();
+    expect(q(".toast")?.textContent).toBe("Deleted 1 key");
+  });
+});

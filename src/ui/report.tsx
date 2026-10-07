@@ -176,7 +176,9 @@ const problemOf = (e: unknown): Problem => {
   return { kind: kinds[e.status] ?? "invalid", message: e.message };
 };
 
-type Confirm = { kind: "discard" | "source"; n: number };
+type Confirm =
+  | { kind: "discard" | "source"; n: number }
+  | { kind: "delete"; n: number; ids: string[] };
 type CopyState = "copy" | "copied" | "copyBlocked";
 
 type ReportProps = {
@@ -384,6 +386,31 @@ export const Report = ({
         apply({ type: "conflicts", conflicts: e.conflicts ?? [] });
         fetchModel().then(onModel, () => {
           // keep the model we have; the conflict banner is already shown
+        });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Permanently delete archived rows. Immediate, not staged; only with nothing pending. */
+  const deleteRows = async (ids: string[]) => {
+    setSaving(true);
+    setProblem(null);
+    try {
+      const result = await saveBatch({
+        edits: [],
+        statuses: [],
+        prune: ids.map((id) => ({ id })),
+      });
+      setSelected(new Set());
+      onModel(result.model);
+      setToast(tn("toast.deleted", result.written.deleted ?? ids.length));
+    } catch (e) {
+      setProblem(problemOf(e));
+      if (e instanceof ApiError && e.status === 409) {
+        fetchModel().then(onModel, () => {
+          // keep the model we have; the problem banner is already shown
         });
       }
     } finally {
@@ -665,6 +692,13 @@ export const Report = ({
           expectedState: entry.from,
         });
 
+  // Permanent deletion is offered only when every selected row is archived.
+  const selectedArchived =
+    selected.size > 0 &&
+    [...selected].every(
+      (id) => model.rows.find((r) => rowId(r) === id)?.status === "archived"
+    );
+
   // Groups holding unsaved changes, marked in the sidebar.
   const dirtyGroups = new Set(
     listStaged(staged).flatMap((entry) => {
@@ -894,6 +928,23 @@ export const Report = ({
               >
                 {tn("bulk.set", selected.size)}
               </button>
+              {selectedArchived && (
+                <button
+                  class="act danger"
+                  disabled={count > 0 || saving}
+                  onClick={() =>
+                    setConfirm({
+                      kind: "delete",
+                      n: selected.size,
+                      ids: [...selected],
+                    })
+                  }
+                  title={count > 0 ? t("bulk.deleteBlocked") : undefined}
+                  type="button"
+                >
+                  {tn("bulk.delete", selected.size)}
+                </button>
+              )}
             </span>
           )}
         </div>
@@ -1032,13 +1083,17 @@ export const Report = ({
       {help && <ShortcutsDialog onClose={() => setHelp(false)} tr={tr} />}
       {confirm && (
         <ConfirmDialog
+          danger={confirm.kind === "delete"}
+          items={confirm.kind === "delete" ? confirm.ids : undefined}
           onCancel={() => setConfirm(null)}
           onYes={() => {
-            const kind = confirm.kind;
+            const open = confirm;
             setConfirm(null);
-            if (kind === "discard") {
+            if (open.kind === "discard") {
               apply({ type: "discard" });
               setProblem(null);
+            } else if (open.kind === "delete") {
+              deleteRows(open.ids);
             } else {
               save(true);
             }
