@@ -22,6 +22,9 @@ import {
 import { tempDir } from "./helpers.js";
 
 const packaged = readPackagedSkill();
+const packageVersion = JSON.parse(
+  readFileSync(join(import.meta.dirname, "../package.json"), "utf8")
+).version;
 const agents = { target: "agents", force: false } as const;
 const claude = { target: "claude", force: false } as const;
 const FLAG = /--[a-z][a-z-]*/g;
@@ -156,7 +159,7 @@ describe("installSkill on disk", () => {
       action: "create",
       path: skill,
       written: true,
-      version: "0.1.0",
+      version: packageVersion,
     });
     expect(first.bytes).toBe(Buffer.byteLength(packaged));
     expect(first.sha256).toMatch(SHA_PREFIX);
@@ -365,7 +368,7 @@ describe("skill command line", () => {
     expect(dry.code).toBe(0);
     expect(dry.out).toContain(`create: ${skill}`);
     expect(dry.out).toContain(`${Buffer.byteLength(packaged)} bytes, sha256 `);
-    expect(dry.out).toContain("i18n-studio-version 0.1.0");
+    expect(dry.out).toContain(`i18n-studio-version ${packageVersion}`);
     expect(dry.out).toContain("dry run, nothing written");
     expect(existsSync(skill)).toBe(false);
 
@@ -384,7 +387,7 @@ describe("skill command line", () => {
     expect(json).toMatchObject({
       action: "update",
       written: true,
-      version: "0.1.0",
+      version: packageVersion,
     });
   });
 
