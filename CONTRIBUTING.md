@@ -15,6 +15,16 @@ pnpm lint                        # Biome (ultracite preset); `pnpm exec biome ch
 
 CI runs install (frozen lockfile), typecheck, lint, build and test on Node 22.
 
+To try a local build in another app:
+
+```bash
+pnpm install && pnpm build
+cd ../your-app
+pnpm add -D ../i18n-studio
+```
+
+If `node_modules/.bin/i18n-studio` is not created, call `node node_modules/i18n-studio/dist/bin.js` instead. Re-run `pnpm build` after changing the source. The UI lives in `src/ui/` (TSX, Preact); Preact and esbuild are dev dependencies only, so the published package keeps zero runtime dependencies.
+
 ## Releases
 
 User-visible pull requests should include a Changeset:
@@ -57,7 +67,7 @@ pull requests" so the automated version pull request can be opened.
 
 1. Add it to `Config`, `DEFAULTS`, `FILE_SCHEMA` (strict type) and, if it has a flag, `ConfigFlags` and `flagValues` in `src/config.ts`; declare negative flags (`--no-x`) explicitly in `src/cli.ts` (`parseArgs` negation is not reliable on Node 22).
 2. Enforce it where it matters and add it to `baseConfig`.
-3. Document it in the README config table and `--help`, and add tests (validation, flag precedence, behaviour).
+3. Document it in the [configuration reference](docs/configuration.md) and `--help`, and add tests (validation, flag precedence, behaviour).
 
 ## Security expectations
 

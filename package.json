@@ -1,7 +1,7 @@
 {
   "name": "i18n-studio",
   "version": "0.1.1",
-  "description": "Review-status layer and export/import loop for translation JSON.",
+  "description": "Review locale JSON in the browser or a spreadsheet, then bring accepted translations back into the repo.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.9.1",
@@ -26,7 +26,9 @@
     "dist",
     "skills",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/banner.png",
+    "docs/studio.png"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/build-ui.mjs && chmod +x dist/bin.js",
