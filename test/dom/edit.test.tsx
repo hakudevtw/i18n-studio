@@ -54,6 +54,34 @@ describe("cell editor", () => {
     expect(td?.querySelector(".dot")).not.toBeNull();
   });
 
+  it("a small edit shows only the changed words, a rewrite shows both values", async () => {
+    await show();
+    await dblclick(cell("home", "en"));
+    await type(editor(), "Home page");
+    await key(editor(), "Enter");
+    const small = cell("home", "en");
+    expect(small?.querySelector("ins.word")?.textContent).toBe(" page");
+    expect(small?.querySelector("del")).toBeNull();
+    await dblclick(cell("home", "ko"));
+    await type(editor(), "집");
+    await key(editor(), "Enter");
+    const rewrite = cell("home", "ko");
+    expect(rewrite?.querySelector("del:not(.word)")?.textContent).toBe("홈");
+    expect(rewrite?.querySelector("ins")).toBeNull();
+  });
+
+  it("clicking inside the open editor keeps it open and focused", async () => {
+    await show();
+    await dblclick(cell("home", "ko"));
+    await type(editor(), "집");
+    await click(editor());
+    await dblclick(editor());
+    expect(editor()).not.toBeNull();
+    expect(document.activeElement).toBe(editor());
+    expect(editor()?.value).toBe("집");
+    expect(pending()).toBe("0 pending changes");
+  });
+
   it("Shift+Enter does not commit (it inserts a newline), Escape cancels", async () => {
     await show();
     await dblclick(cell("home", "ko"));
@@ -190,6 +218,40 @@ describe("pending changes list", () => {
     expect(pending()).toBe("0 pending changes");
   });
 
+  it("a jump selects the cell and centres it, clear of the open pending list", async () => {
+    await show(model({ showArchived: true }));
+    await dblclick(cell("home", "ko"));
+    await type(editor(), "집");
+    await key(editor(), "Enter");
+    await click(cell("faq", "en"));
+    await click(q("#pending"));
+    const scrolled: Element[] = [];
+    const spy = vi
+      .spyOn(Element.prototype, "scrollIntoView")
+      .mockImplementation(function (this: Element, arg) {
+        if (typeof arg === "object" && arg.block === "center") {
+          scrolled.push(this);
+        }
+      });
+    await click(q("#pending-list button.entry"));
+    spy.mockRestore();
+    const target = cell("home", "ko");
+    expect(grid()?.getAttribute("aria-activedescendant")).toBe(target?.id);
+    expect(scrolled).toEqual([target]);
+  });
+
+  it("marks groups holding unsaved changes in the sidebar", async () => {
+    await show();
+    expect(qa("#side .dot")).toHaveLength(0);
+    await dblclick(cell("home", "ko"));
+    await type(editor(), "집");
+    await key(editor(), "Enter");
+    const marked = qa("#side button")
+      .filter((b) => b.querySelector(".dot"))
+      .map((b) => b.querySelector("span")?.firstChild?.textContent);
+    expect(marked).toHaveLength(2); // "All" and the row's group
+  });
+
   it("truncates long values and lists status changes", async () => {
     await show();
     await dblclick(cell("home", "ko"));
@@ -236,6 +298,19 @@ describe("filters", () => {
     expect(q(".empty")?.textContent).toBe("No rows match the current filters.");
     await choose(qa<HTMLSelectElement>(".filters select")[0], "approved");
     expect(q("table")).toBeNull();
+  });
+
+  it("highlights the search text in keys and values, ignoring case", async () => {
+    await show();
+    await type(q('input[type="search"]'), "FAQ");
+    expect(qa("mark").map((m) => m.textContent.toLowerCase())).not.toHaveLength(
+      0
+    );
+    expect(qa("mark").every((m) => m.textContent.toLowerCase() === "faq")).toBe(
+      true
+    );
+    await type(q('input[type="search"]'), "");
+    expect(qa("mark")).toHaveLength(0);
   });
 });
 

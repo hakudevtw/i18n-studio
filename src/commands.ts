@@ -240,40 +240,19 @@ export const init = (config: Config, { force }: { force: boolean }) => {
   return { approved: rows.length };
 };
 
-export type PruneListing = { address: string; values: Record<string, string> };
-
 /**
- * Permanently delete archived keys from every locale's JSON and from the status files.
- * Without `yes` it only lists them. The tool cannot know whether application code still
- * references a key: check usage first.
+ * The files that delete `rows` from every locale's JSON and from the status files.
+ * Throws when a deletion would leave a gap in an array. Shared by `prune` and the
+ * studio's save endpoint.
  */
-export const prune = (
+export const pruneWrites = (
   config: Config,
-  scope: Scope,
-  { yes }: { yes: boolean }
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validate, list, then delete
-) => {
-  const catalog = loadCatalog(config);
-  const rows = selectRows(config, catalog, scope);
-  const notArchived = rows.filter((r) => r.state !== "archived");
-  if (scope.keys?.length && notArchived.length > 0) {
-    throw new Error(
-      `Not archived (run \`mark archived\` first): ${notArchived.map((r) => r.address).join(", ")}`
-    );
-  }
-  const archived = rows.filter((r) => r.state === "archived");
-  const listing: PruneListing[] = archived.map((r) => ({
-    address: r.address,
-    values: r.values,
-  }));
-  if (!yes || archived.length === 0) {
-    return { dryRun: !yes, deleted: 0, archived: listing };
-  }
+  catalog: Catalog,
+  rows: Pick<Row, "ns" | "key">[]
+): WriteFile[] => {
   const files: WriteFile[] = [];
-  for (const ns of new Set(archived.map((r) => r.ns))) {
-    const doomed = new Set(
-      archived.filter((r) => r.ns === ns).map((r) => r.key)
-    );
+  for (const ns of new Set(rows.map((r) => r.ns))) {
+    const doomed = new Set(rows.filter((r) => r.ns === ns).map((r) => r.key));
     for (const lang of localesOf(config, catalog)) {
       const kept = (catalog.messages[lang][ns] ?? []).filter(
         ([key]) => !doomed.has(key)
@@ -294,7 +273,38 @@ export const prune = (
     }
     files.push(statusFile(config, catalog, ns, records));
   }
-  atomicWriteAll(files);
+  return files;
+};
+
+export type PruneListing = { address: string; values: Record<string, string> };
+
+/**
+ * Permanently delete archived keys from every locale's JSON and from the status files.
+ * Without `yes` it only lists them. The tool cannot know whether application code still
+ * references a key: check usage first.
+ */
+export const prune = (
+  config: Config,
+  scope: Scope,
+  { yes }: { yes: boolean }
+) => {
+  const catalog = loadCatalog(config);
+  const rows = selectRows(config, catalog, scope);
+  const notArchived = rows.filter((r) => r.state !== "archived");
+  if (scope.keys?.length && notArchived.length > 0) {
+    throw new Error(
+      `Not archived (run \`mark archived\` first): ${notArchived.map((r) => r.address).join(", ")}`
+    );
+  }
+  const archived = rows.filter((r) => r.state === "archived");
+  const listing: PruneListing[] = archived.map((r) => ({
+    address: r.address,
+    values: r.values,
+  }));
+  if (!yes || archived.length === 0) {
+    return { dryRun: !yes, deleted: 0, archived: listing };
+  }
+  atomicWriteAll(pruneWrites(config, catalog, archived));
   return { dryRun: false, deleted: archived.length, archived: listing };
 };
 

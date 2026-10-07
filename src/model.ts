@@ -74,7 +74,14 @@ export type SaveStatusChange = {
   /** The derived state the client saw; refused (409) when it differs now. */
   expectedState: string;
 };
-export type SavePayload = { edits: SaveEdit[]; statuses: SaveStatusChange[] };
+/** Permanently delete an archived row from every language and from the status file. */
+export type SavePrune = { id: string };
+/** `prune` is sent on its own: a batch either edits or deletes, never both. */
+export type SavePayload = {
+  edits: SaveEdit[];
+  statuses: SaveStatusChange[];
+  prune?: SavePrune[];
+};
 
 export type SaveConflict = {
   id: string;
@@ -86,7 +93,8 @@ export type SaveConflict = {
 
 export type SaveResult = {
   ok: true;
-  written: { files: number; cells: number };
+  /** `deleted` is set only on a prune batch. */
+  written: { files: number; cells: number; deleted?: number };
   /** Rows of other languages that became stale because the source locale was edited. */
   staleRows: number;
   warnings: string[];
