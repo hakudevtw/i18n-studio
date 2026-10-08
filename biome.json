@@ -1,16 +1,41 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "extends": ["ultracite/core"],
+  "extends": ["ultracite/biome/core"],
   "files": {
-    "includes": ["**", "!dist", "!coverage", "!test/fixtures"]
+    "includes": ["!dist", "!coverage", "!test/fixtures", "!src/ui/favicon.svg"]
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "useSortedKeys": "off",
+        "useSortedProperties": "off",
+        "useSortedAttributes": "off",
+        "useSortedPackageJson": "off"
+      }
+    }
   },
   "linter": {
     "rules": {
       "suspicious": {
-        "noExplicitAny": "off"
+        "noExplicitAny": "off",
+        "noUnnecessaryConditions": "off"
       },
       "style": {
-        "noMagicNumbers": "off"
+        "noMagicNumbers": "off",
+        "useConsistentTypeDefinitions": {
+          "level": "error",
+          "options": {
+            "style": "type"
+          }
+        },
+        "useDestructuring": "off",
+        "noNestedTernary": "off",
+        "noDescendingSpecificity": "off",
+        "useErrorCause": "off"
+      },
+      "performance": {
+        "noAwaitInLoops": "off",
+        "noJsxPropsBind": "off"
       }
     }
   }
