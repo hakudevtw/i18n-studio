@@ -177,7 +177,6 @@ const readConfigFile = (file: string): Values => {
   return data as Values;
 };
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one flag per branch
 const flagValues = (flags: ConfigFlags): Values => {
   const out: Values = {};
   if (flags.source !== undefined) {

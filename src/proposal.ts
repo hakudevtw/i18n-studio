@@ -117,7 +117,6 @@ const localeOf = (cell: string, ctx: Ctx, all: string[]) => {
   return h ? all.find((l) => matchesLang(h, l)) : undefined;
 };
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: scans candidate header rows
 const findHeader = (rows: string[][], ctx: Ctx): Layout | null => {
   const all = [ctx.config.sourceLocale, ...ctx.locales];
   let best: (Layout & { score: number }) | null = null;
@@ -319,7 +318,6 @@ const place = (
   }
 };
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass over the sheet rows
 const parseSheet = (sheet: Sheet, ctx: Ctx, defaultNs: string | undefined) => {
   const layout =
     findHeader(sheet.rows, ctx) ??

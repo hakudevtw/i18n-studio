@@ -75,5 +75,4 @@ export const findArrayGap = (pairs: Flat): string | undefined => {
       return owner;
     }
   }
-  return;
 };
