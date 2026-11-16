@@ -15,6 +15,7 @@ import {
   noop,
   pending,
   q,
+  settle,
   type,
 } from "./dom.js";
 
@@ -30,7 +31,10 @@ const show = () =>
   );
 
 beforeAll(installDomStubs);
-afterEach(cleanup);
+afterEach(async () => {
+  cleanup();
+  await settle(); // let preact run the unmount effects before jsdom goes away
+});
 
 describe("offline review page", () => {
   it("edits translations, never the source language or a status", async () => {
