@@ -249,6 +249,9 @@ table {
 table.writable {
   --check-w: 40px;
 }
+table.writable.offline {
+  --check-w: 0px;
+}
 col.c-check {
   width: var(--check-w);
 }
