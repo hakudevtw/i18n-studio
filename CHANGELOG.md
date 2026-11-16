@@ -1,5 +1,15 @@
 # i18n-studio
 
+## 0.3.0
+
+### Minor Changes
+
+- 0635608: The shared `report.html` is now editable for reviewers: change translation cells in the page and press Download TSV to get a file `import` reads back. The studio's conflict banner gains a "Jump to conflict" button, the skill explains what to do when the tool is not installed, and the npm keywords mention review.
+
+### Patch Changes
+
+- 53d29cd: Fix the shared report layout: the first language column was hidden under the sticky status and key columns because the table still reserved room for the checkbox column.
+
 ## 0.2.0
 
 ### Minor Changes
