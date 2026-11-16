@@ -450,7 +450,7 @@ export const Grid = (g: GridProps) => {
     <table
       aria-activedescendant={writable ? activeCell : undefined}
       aria-label={tr.t("title")}
-      class={writable ? "writable" : undefined}
+      class={writable ? `writable${model.offline ? "offline" : ""}` : undefined}
       onKeyDown={writable ? g.on.keyDown : undefined}
       ref={g.gridRef}
       role="grid"
