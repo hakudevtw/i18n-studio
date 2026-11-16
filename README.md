@@ -2,6 +2,8 @@
 
 ![i18n-studio](docs/banner.png)
 
+**[Try the reviewer page](https://hakudevtw.github.io/i18n-studio/)**: a sample report you can edit in the browser. Nothing is uploaded.
+
 [![npm version](https://img.shields.io/npm/v/i18n-studio)](https://www.npmjs.com/package/i18n-studio)
 [![license](https://img.shields.io/npm/l/i18n-studio)](./LICENSE)
 [![Node.js version](https://img.shields.io/node/v/i18n-studio)](https://nodejs.org)
@@ -43,7 +45,7 @@ i18n-studio --help                                         # or: i18n-studio <co
 | `status` | Count rows per state. |
 | `studio` | Browse and edit in the browser. |
 | `check` | Report missing, empty, stale, and out-of-order rows. |
-| `report` | Write a self-contained HTML report. |
+| `report` | Write a self-contained HTML file a reviewer can open, edit and send back as a TSV. |
 | `init` | Baseline existing complete rows as `approved`. |
 | `export` / `import` / `apply` | Send rows to a sheet and write accepted cells back. |
 | `draft` / `approve` / `mark` | Set a review status. |
@@ -56,7 +58,7 @@ Flags, config keys, and each command's options are in the [configuration](docs/c
 ## Review loop
 
 1. `export` writes a TSV (or xlsx/csv) of rows that need review. Exported rows become `in-review`.
-2. A reviewer edits the sheet. The status column is ignored on the way back.
+2. A reviewer edits the sheet, or opens `report.html`, edits the cells and presses **Download TSV**. The status column is ignored on the way back.
 3. `import` reads the sheet into `proposal.json` and overlays the diff on `report.html`. It does not write messages.
 4. Inspect changed, pending, and confirmed rows.
 5. `apply` writes accepted cells. Complete rows become `approved`; partial rows stay `in-review`.
@@ -67,6 +69,7 @@ States, the proposal file, and the full command reference: [Review workflow](doc
 
 - [Configuration](docs/configuration.md) — flags, `i18n-studio.config.json`, layout, page language
 - [Review workflow](docs/review.md) — states, export/import, `proposal.json`
+- [CI](docs/ci.md) — annotate pull requests with `check --format github`
 - [Studio](docs/studio.md) — editing, drafts, archived rows, save API
 - [Security](docs/security.md) — local server, dependencies, publishing
 - [Agents](docs/agents.md) — rules for editing translations

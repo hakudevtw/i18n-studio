@@ -1,0 +1,9 @@
+{
+  "title": "Complete your order",
+  "payNow": "Pay now",
+  "coupon": {
+    "label": "Coupon code",
+    "apply": "Apply"
+  },
+  "thanks": "Thanks for your order!\nA receipt is on its way."
+}

@@ -17,7 +17,7 @@ Unless `readOnly`, the studio edits like Prisma Studio: changes are **staged** a
 - **Search** highlights every match in keys and values, ignoring case.
 - **Theme**: the top bar's sun/moon button switches between light and dark. Until you pick one, the page follows the system setting; the choice is remembered in the browser.
 - Menus and dialogs render in a top-level layer (never clipped by the scrolling table) and close on Esc, outside click, scroll or resize, returning focus to their trigger.
-- The static `report` and `--read-only` studio render none of this.
+- `--read-only` renders none of this. The static `report` is a lighter variant for reviewers: translation cells (not the source language) can be edited and statuses are fixed; instead of Save there is **Download TSV**, which writes `review.tsv` in the layout `import` reads. Nothing is written to the project from that page.
 - The page is designed for desktop widths: below about 960 px it scrolls horizontally instead of squeezing the table.
 
 ## Drafts

@@ -374,7 +374,11 @@ const StatusCell = ({
 
 const GroupRow = ({ g, group }: { g: GridProps; group: string }) => (
   <tr class="group">
-    <td class="label" colSpan={g.writable ? 3 : 2} role="gridcell">
+    <td
+      class="label"
+      colSpan={g.writable && !g.model.offline ? 3 : 2}
+      role="gridcell"
+    >
       {g.groupLabel(group)}
     </td>
     <td colSpan={Math.max(1, g.cols.length)} role="gridcell" />
@@ -393,7 +397,7 @@ const BodyRow = ({
   const id = rowId(row);
   return (
     <tr class={row.status === "archived" ? "archived" : undefined}>
-      {g.writable && (
+      {g.writable && !g.model.offline && (
         <td class="check" role="gridcell">
           <input
             aria-label={g.tr.t("select.row", { key: row.key })}
@@ -454,7 +458,7 @@ export const Grid = (g: GridProps) => {
       tabIndex={writable ? 0 : undefined}
     >
       <colgroup>
-        {writable && <col class="c-check" />}
+        {writable && !model.offline && <col class="c-check" />}
         <col class="c-status" />
         <col class="c-key" />
         {cols.map((i) => (
@@ -463,7 +467,7 @@ export const Grid = (g: GridProps) => {
       </colgroup>
       <thead>
         <tr>
-          {writable && (
+          {writable && !model.offline && (
             <th class="check" role="columnheader">
               <input
                 aria-label={tr.t("select.all")}

@@ -46,6 +46,20 @@ export const hasConflicts = (s: Staged) =>
   Object.values(s.cells).some((c) => c.conflict !== undefined) ||
   Object.values(s.statuses).some((c) => c.conflict !== undefined);
 
+/** The first staged change that conflicts with disk, cells before statuses. */
+export const firstConflict = (
+  s: Staged
+): { id: string; lang?: string } | undefined => {
+  const cell = Object.values(s.cells).find((c) => c.conflict !== undefined);
+  if (cell) {
+    return { id: cell.id, lang: cell.lang };
+  }
+  const status = Object.values(s.statuses).find(
+    (c) => c.conflict !== undefined
+  );
+  return status && { id: status.id };
+};
+
 const without = <T>(record: Record<string, T>, key: string) =>
   Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
 

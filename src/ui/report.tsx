@@ -22,6 +22,7 @@ import { clampSel, type Move, move, type Sel } from "./nav";
 import {
   cellKey,
   countStaged,
+  firstConflict,
   hasConflicts,
   hasSourceEdits,
   listStaged,
@@ -198,6 +199,7 @@ export const Report = ({
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one component owns the studio state
 }: ReportProps) => {
   const { t, tn, has } = tr;
+  const offline = model.offline === true;
   const writable = !model.readOnly;
   const source = model.columns[0];
   const [q, setQ] = useState("");
@@ -282,7 +284,8 @@ export const Report = ({
     model.storedStates.includes(s) || DERIVED.includes(s);
   const editable = (r: ModelRow) =>
     writable && isReal(r.status) && r.status !== "archived";
-  const statusEditable = (r: ModelRow) => writable && isReal(r.status);
+  const statusEditable = (r: ModelRow) =>
+    writable && !offline && isReal(r.status);
 
   const cols = model.columns
     .map((_, i) => i)
@@ -324,6 +327,9 @@ export const Report = ({
       return;
     }
     const modelCol = cols[col - 1];
+    if (offline && modelCol === 0) {
+      return; // reviewers never change the source language
+    }
     const lang_ = model.columns[modelCol];
     const cell = row.cells[modelCol];
     const staged_ = stagedRef.current.cells[cellKey(rowId(row), lang_)];
@@ -419,6 +425,14 @@ export const Report = ({
   };
 
   const save = async (confirmedSource = false) => {
+    if (offline) {
+      const open = editingRef.current;
+      if (open) {
+        commit(open.value);
+      }
+      download();
+      return;
+    }
     if (saving || !writable) {
       return;
     }
@@ -604,8 +618,8 @@ export const Report = ({
     scrollRef.current?.scrollTo(0, 0);
   };
 
-  const copy = async () => {
-    const overlay = visible.map((r) => ({
+  const withStaged = (rows: ModelRow[]) =>
+    rows.map((r) => ({
       ...r,
       status: stagedRef.current.statuses[rowId(r)]?.state ?? r.status,
       cells: r.cells.map((c, i) => ({
@@ -615,6 +629,24 @@ export const Report = ({
             ?.current ?? c.text,
       })),
     }));
+
+  /** Every non-archived row with the reviewer's edits, in the layout `import` reads. */
+  const download = () => {
+    const rows = withStaged(model.rows.filter((r) => r.status !== "archived"));
+    const all = model.columns.map((_, i) => i);
+    const text = tsvText(rows, model.columns, all, true);
+    const url = URL.createObjectURL(
+      new Blob([text], { type: "text/tab-separated-values;charset=utf-8" })
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "review.tsv";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), COPY_RESET_MS);
+  };
+
+  const copy = async () => {
+    const overlay = withStaged(visible);
     const text = tsvText(overlay, model.columns, cols, model.copyHeader);
     const ok = await copyText(text);
     if (!ok) {
@@ -675,6 +707,12 @@ export const Report = ({
     setShowArchived(true);
     pick(row.group);
     setJump({ id, lang: language });
+  };
+  const jumpToConflict = () => {
+    const at = firstConflict(stagedRef.current);
+    if (at) {
+      jumpTo(at.id, at.lang);
+    }
   };
   const revert = (entry: StagedEntry) =>
     entry.kind === "cell"
@@ -804,6 +842,11 @@ export const Report = ({
           </div>
         </div>
         {banner && <div id="banner">{banner}</div>}
+        {offline && (
+          <div class="note" id="offline-note">
+            <span>{t("offline.hint")}</span>
+          </div>
+        )}
         {draftNote && count > 0 && (
           <div aria-live="polite" class="note" id="draft">
             <span>
@@ -817,6 +860,11 @@ export const Report = ({
                 .filter(Boolean)
                 .join(" ")}
             </span>
+            {draftNote.conflicts > 0 && (
+              <button class="mini" onClick={jumpToConflict} type="button">
+                {t("conflict.jump")}
+              </button>
+            )}
             <button
               class="mini"
               onClick={() => setConfirm({ kind: "discard", n: count })}
@@ -856,7 +904,12 @@ export const Report = ({
         )}
         {problemText && (
           <div id="error" role="alert">
-            {problemText}
+            <span>{problemText}</span>
+            {problem?.kind === "conflict" && (
+              <button class="mini" onClick={jumpToConflict} type="button">
+                {t("conflict.jump")}
+              </button>
+            )}
           </div>
         )}
         <div class="filters">
@@ -904,7 +957,7 @@ export const Report = ({
           <button class="act" onClick={copy} type="button">
             {t(copyState)}
           </button>
-          {writable && selected.size > 0 && (
+          {writable && !offline && selected.size > 0 && (
             <span class="bulk">
               <select
                 aria-label={t("bulk.choose")}
@@ -1050,7 +1103,11 @@ export const Report = ({
               onClick={() => save()}
               type="button"
             >
-              {saving ? t("bar.saving") : t("bar.save")}
+              {offline
+                ? t("bar.download")
+                : saving
+                  ? t("bar.saving")
+                  : t("bar.save")}
             </button>
           </section>
         )}

@@ -11,6 +11,7 @@ i18n-studio keeps a review status per translation row (one key across all langua
 ## Find the tool
 
 - Look in `package.json` scripts for one that runs `i18n-studio --dir <messages dir>` (often named `i18n`) and use it. Without one, run `i18n-studio --dir <messages dir> <command>`.
+- If `i18n-studio` is not installed, do not install it on your own. Tell the user and offer `pnpm add -D i18n-studio` (or the npm/yarn equivalent), then one baseline run of `i18n-studio --dir <messages dir> init`, which marks existing complete rows `approved`. Ask first: it changes `package.json` and writes status files.
 - Run `i18n-studio --help` and `i18n-studio <command> --help` for commands, flags and states. This file only holds the rules.
 - Prefer `--json` output for anything you parse. Never start `i18n-studio studio`; it is for humans.
 

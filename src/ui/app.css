@@ -618,6 +618,10 @@ th.check input {
   height: 34px;
 }
 #error {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
   background: light-dark(#fef2f2, #2a1215);
   padding: 8px 16px;
   border-bottom: 1px solid var(--line);

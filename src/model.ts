@@ -47,6 +47,12 @@ export type Model = {
   uiLocale: UiLocaleSetting;
   /** The server refuses writes (config `readOnly`); the static report is always read-only. */
   readOnly: boolean;
+  /**
+   * The shared static report: reviewers edit cells in the page (nothing is saved to disk) and
+   * download a TSV that `import` reads back. Set by `renderReport`; statuses and the source
+   * language stay read-only.
+   */
+  offline?: boolean;
   /** Show the language select in the top bar (config `languageSwitcher`). */
   languageSwitcher: boolean;
   /** Keep unsaved edits in the browser (config `persistDrafts`). */
