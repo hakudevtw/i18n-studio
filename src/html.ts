@@ -33,11 +33,12 @@ const inlineSafe = (code: string, tag: "script" | "style") =>
  * No network access. `<` is escaped in the JSON so values can never close the script.
  */
 export const renderReport = (model: Model): string => {
-  // The static report can never save.
-  const data = JSON.stringify({ ...model, readOnly: true }).replaceAll(
-    "<",
-    "\\u003c"
-  );
+  // The static report can never save to disk; reviewers download a TSV instead.
+  const data = JSON.stringify({
+    ...model,
+    readOnly: false,
+    offline: true,
+  }).replaceAll("<", "\\u003c");
   return `<!doctype html>
 <html lang="en"><head>${HEAD}<title>${escapeHtml(model.title)}</title>
 <link rel="icon" type="image/svg+xml" href="${faviconDataUri()}">

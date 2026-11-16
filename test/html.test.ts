@@ -41,7 +41,11 @@ describe("renderReport embedding", () => {
   it("keeps the data block parseable and lossless", () => {
     const match = html.match(DATA_BLOCK);
     expect(match).not.toBeNull();
-    expect(JSON.parse(match?.[1] ?? "")).toEqual(model);
+    expect(JSON.parse(match?.[1] ?? "")).toEqual({
+      ...model,
+      readOnly: false,
+      offline: true,
+    });
   });
 
   it("never lets a value close the script or open a tag", () => {

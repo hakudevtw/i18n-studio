@@ -29,7 +29,7 @@ Global flags work anywhere on the command line. A config file is optional. Prece
 | `excludeLocales` | none | `[]` | Locales ignored everywhere. Cannot contain the source locale. |
 | `namespaceOrder` | none | `[]` | These namespaces first, the rest alphabetically. |
 | `excludeNamespaces` | none | `[]` | Namespaces ignored everywhere. |
-| `readOnly` | `--read-only` | `false` | The studio server refuses `POST /api/save` (403) and the model carries `readOnly: true`. The static `report` is always read-only. |
+| `readOnly` | `--read-only` | `false` | The studio server refuses `POST /api/save` (403) and the model carries `readOnly: true`. The static `report` never writes to disk (reviewers edit in the page and download a TSV). |
 | `languageSwitcher` | `--no-language-switcher` | `true` | Show a language select (en, ko, zh-TW, ja) in the page's top bar. When off, a remembered choice is ignored (`?lang=` still works). |
 | `persistDrafts` | `--persist-drafts` / `--no-persist-drafts` | `true` | Keep staged (unsaved) studio edits in the browser so a refresh or crash does not lose them. When off, nothing is read or written and an existing draft is left untouched. |
 | `showArchived` | `--show-archived` / `--no-show-archived` | `false` | Initial state of the page's "Show archived" toggle. Only the page changes; `check`, `export`, `status`, `init` and `prune` are unaffected. |

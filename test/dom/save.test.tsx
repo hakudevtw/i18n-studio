@@ -209,6 +209,15 @@ describe("conflicts (409)", () => {
     expect(api.fetchModel).toHaveBeenCalled(); // refreshed in the background
   });
 
+  it("Jump to conflict selects the conflicted cell from the banner", async () => {
+    await stageConflict();
+    await click(button("Jump to conflict"));
+    await settle();
+    const target = cell("home", "ko");
+    expect(target?.classList.contains("conflicted")).toBe(true);
+    expect(q("#error button")?.textContent).toBe("Jump to conflict");
+  });
+
   it("Keep mine re-bases the expectation on what is on disk", async () => {
     await stageConflict();
     await click(button("Keep mine"));

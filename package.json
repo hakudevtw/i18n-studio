@@ -17,6 +17,9 @@
     "i18n",
     "localization",
     "translation",
+    "translation-review",
+    "locale-json",
+    "spreadsheet",
     "cli"
   ],
   "bin": {
