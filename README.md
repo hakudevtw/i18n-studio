@@ -2,6 +2,8 @@
 
 ![i18n-studio](docs/banner.png)
 
+**[Try the reviewer page](https://hakudevtw.github.io/i18n-studio/)**: a sample report you can edit in the browser. Nothing is uploaded.
+
 [![npm version](https://img.shields.io/npm/v/i18n-studio)](https://www.npmjs.com/package/i18n-studio)
 [![license](https://img.shields.io/npm/l/i18n-studio)](./LICENSE)
 [![Node.js version](https://img.shields.io/node/v/i18n-studio)](https://nodejs.org)
